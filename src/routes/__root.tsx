@@ -123,7 +123,13 @@ function RootComponent() {
           </StoreProvider>
         </AccountLifecycleProvider>
       </AuthProvider>
-      <Toast.Provider placement="top end" width={360} gap={8} maxVisibleToasts={3} />
+      <Toast.Provider
+        className="app-toast-region"
+        placement="bottom end"
+        width={360}
+        gap={8}
+        maxVisibleToasts={3}
+      />
     </QueryClientProvider>
   );
 }
