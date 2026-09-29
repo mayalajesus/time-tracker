@@ -10,6 +10,13 @@ type TimerStartValidation =
   | { success: true; preset: Pick<TimerTaskPreset, "task" | "projectId" | "billable"> }
   | { success: false; error: string };
 
+export function validateTimerDetails(task: string, projectId: string | null) {
+  if (!task.trim()) return { success: false as const, error: "A task is required." };
+  if (!projectId?.trim())
+    return { success: false as const, error: "Select a project before starting the timer." };
+  return { success: true as const };
+}
+
 export function validateTimerTaskStart(
   preset: TimerTaskPreset,
   context: {
@@ -21,6 +28,8 @@ export function validateTimerTaskStart(
   if (context.timerStatus !== "idle") {
     return { success: false, error: "Stop the active timer before starting another one." };
   }
+  const details = validateTimerDetails(preset.task, preset.projectId);
+  if (!details.success) return details;
 
   if (preset.projectId !== null) {
     const project = context.projects.find((candidate) => candidate.id === preset.projectId);
@@ -48,7 +57,7 @@ export function validateTimerTaskStart(
   return {
     success: true,
     preset: {
-      task: preset.task,
+      task: preset.task.trim(),
       projectId: preset.projectId,
       billable: preset.billable,
     },
@@ -64,10 +73,12 @@ export function createRunningTimer(
     startClock: string;
   } & BillingPreference,
 ): TimerState {
+  const validation = validateTimerDetails(preset.task, preset.projectId);
+  if (!validation.success) throw new Error(validation.error);
   return {
     status: "running",
     workspaceId: context.workspaceId,
-    task: preset.task.trim() || "Untitled task",
+    task: preset.task.trim(),
     projectId: preset.projectId,
     billable: preset.billable,
     startedAt: context.now,

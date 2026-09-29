@@ -139,8 +139,44 @@ test("members cannot access owner and admin actions", async ({ page }) => {
   await signInAs(page, "member");
   await page.goto("/projects");
   await expect(page.getByRole("button", { name: /New project|Novo projeto/ })).toHaveCount(0);
+  await page.goto("/tracker");
+  const trackerBar = page.locator("[data-tracker-bar]");
+  await trackerBar.locator('[data-project-select] [data-slot="autocomplete-trigger"]').click();
+  await expect(
+    page.getByRole("button", { name: /Create new project|Criar novo projeto/ }),
+  ).toHaveCount(0);
   await page.goto("/clients");
   await expect(page.getByRole("button", { name: /New client|Novo cliente/ })).toHaveCount(0);
   await page.goto("/team");
   await expect(page.getByRole("button", { name: /Invite member|Convidar membro/ })).toHaveCount(0);
+});
+
+test("owner opens the complete project form from the tracker search", async ({ page }) => {
+  await signInAs(page, "owner");
+  await page.goto("/tracker");
+  const trackerBar = page.locator("[data-tracker-bar]");
+  const projectTrigger = trackerBar.locator(
+    '[data-project-select] [data-slot="autocomplete-trigger"]',
+  );
+
+  await projectTrigger.click();
+  const projectSearch = page.getByLabel(/Search projects|Buscar projetos/);
+  await projectSearch.fill("Website redesign");
+  await page.getByRole("button", { name: /Create new project|Criar novo projeto/ }).click();
+
+  const projectDialog = page.getByRole("dialog");
+  await expect(projectDialog.getByLabel(/Name|Nome/, { exact: true })).toHaveValue(
+    "Website redesign",
+  );
+  await expect(
+    projectDialog.getByRole("button", { name: /Client|Cliente/, exact: true }),
+  ).toBeVisible();
+  await expect(
+    projectDialog.getByRole("button", { name: /Add project members|Adicionar membros ao projeto/ }),
+  ).toBeVisible();
+  await projectDialog.getByRole("button", { name: /Cancel|Cancelar/, exact: true }).click();
+  await expect(projectDialog).toHaveCount(0);
+
+  await projectTrigger.click();
+  await expect(page.getByLabel(/Search projects|Buscar projetos/)).toHaveValue("");
 });

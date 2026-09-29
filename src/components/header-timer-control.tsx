@@ -1,11 +1,14 @@
 import { toast } from "@heroui/react/toast";
+import { useNavigate } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { useStore, useTimerTicker } from "@/lib/store";
 import { TimerActionButton } from "@/components/timer-action-button";
 import { TimerDurationEditor } from "@/components/timer-duration-editor";
+import { focusTimerTaskInput } from "@/lib/timer-input";
 
 export function HeaderTimerControl() {
-  const { timer, startTimer, pauseTimer, resumeTimer, setTimerElapsed } = useStore();
+  const { timer, pauseTimer, resumeTimer, setTimerElapsed } = useStore();
+  const navigate = useNavigate();
   const { elapsed } = useTimerTicker();
   const { t, error } = useI18n();
 
@@ -16,14 +19,17 @@ export function HeaderTimerControl() {
     }
 
     if (timer.status === "paused") {
-      resumeTimer();
+      const result = resumeTimer();
+      if (!result.success) {
+        toast.danger(t("We couldn't start the timer"), { description: error(result.error) });
+        void navigate({ to: "/tracker" });
+      }
       return;
     }
 
-    const result = startTimer("Quick task", null);
-    if (!result.success) {
-      toast.danger(t("We couldn't start the timer"), { description: error(result.error) });
-    }
+    void navigate({ to: "/tracker" }).then(() => {
+      requestAnimationFrame(() => focusTimerTaskInput(t("A task is required.")));
+    });
   };
 
   return (

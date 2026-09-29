@@ -60,6 +60,7 @@ import {
   recentTimerTasksFromEntries,
   rememberRecentTimerTask,
   validateTimerTaskStart,
+  validateTimerDetails,
   type TimerTaskPreset,
 } from "./timer-start";
 
@@ -754,7 +755,7 @@ interface StoreValue {
   }) => StoreResult;
   setTimerElapsed: (seconds: number) => StoreResult;
   pauseTimer: (effectiveAt?: number) => void;
-  resumeTimer: () => void;
+  resumeTimer: () => StoreResult;
   stopTimer: () => StoreResult;
   addEntry: (entry: Omit<TimeEntry, "id">, options?: AddEntryOptions) => StoreResult;
   updateEntry: (id: string, patch: Partial<Omit<TimeEntry, "id">>) => StoreResult;
@@ -1273,6 +1274,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || !timerHydrated || !authenticatedUserId || !activeWorkspaceId) return;
+    // Let users complete older timers in the editor before persisting them.
+    if (timer.status !== "idle" && !validateTimerDetails(timer.task, timer.projectId).success)
+      return;
     let cancelled = false;
     const isCurrent = () => !cancelled && accountScopeRef.current === accountScope;
     const previous = timerSyncPromiseRef.current ?? Promise.resolve();
@@ -1493,6 +1497,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Your account cannot track time." };
       if (timerRef.current.status !== "idle")
         return { success: false, error: "Stop the active timer before starting another one." };
+      const details = validateTimerDetails(task, projectId);
+      if (!details.success) return details;
       const projectValidation = validateProjectId(projectId);
       if (!projectValidation.success) return projectValidation;
       const projectDefault =
@@ -1543,6 +1549,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = timerRef.current;
       if (current.status === "idle")
         return { success: false, error: "There is no active timer to update." };
+      if (patch.projectId === null)
+        return { success: false, error: "Select a project before starting the timer." };
       if (patch.projectId !== undefined) {
         const projectValidation = validateProjectId(patch.projectId);
         if (!projectValidation.success) return projectValidation;
@@ -1601,20 +1609,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setTimer(next);
     };
 
-    const resumeTimer = () => {
+    const resumeTimer = (): StoreResult => {
       const current = timerRef.current;
-      if (current.status !== "paused" || current.workspaceId !== activeWorkspaceId) return;
+      if (current.status !== "paused" || current.workspaceId !== activeWorkspaceId)
+        return { success: false, error: "There is no paused timer to resume." };
+      const details = validateTimerDetails(current.task, current.projectId);
+      if (!details.success) return details;
+      const projectValidation = validateProjectId(current.projectId);
+      if (!projectValidation.success) return projectValidation;
       const next = { ...current, status: "running" as const, startedAt: Date.now() };
       timerRevisionRef.current += 1;
 
       timerRef.current = next;
       setTimer(next);
+      return { success: true };
     };
 
     const stopTimer = (): StoreResult => {
       const current = timerRef.current;
       if (current.status === "idle" || current.workspaceId !== activeWorkspaceId)
         return { success: false, error: "There is no active timer to stop." };
+      const details = validateTimerDetails(current.task, current.projectId);
+      if (!details.success) return details;
       const total = elapsedForTimer(current);
       const startedDate = current.startedDate ?? getLocalToday(new Date(), preferences.timezone);
       const finish = addSecondsToDateTime(startedDate, current.startClock, total);
@@ -1819,7 +1835,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : data,
         ),
       }));
-      return { success: true };
+      return { success: true, id: createdProject.id };
     };
 
     const updateProject = (id: string, patch: Partial<Omit<Project, "id">>): StoreResult => {

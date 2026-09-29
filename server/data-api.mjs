@@ -1816,6 +1816,9 @@ async function operation(request, user, config, body) {
         throw new DataApiError(400, "Invalid timer status.");
       }
       const task = requiredText(timer.task, "Task", 240);
+      if (!timer.projectId) {
+        throw new DataApiError(400, "Select a project before starting the timer.");
+      }
       const accumulated = Number(timer.accumulated);
       if (!Number.isFinite(accumulated) || accumulated < 0 || accumulated > MAX_INTEGER_SECONDS) {
         throw new DataApiError(400, "The data payload contains an invalid timer duration.");

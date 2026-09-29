@@ -10,21 +10,24 @@ import { ToggleButtonGroup } from "@heroui/react/toggle-button-group";
 import { Toolbar } from "@heroui/react/toolbar";
 import { toast } from "@heroui/react/toast";
 import { Square } from "@gravity-ui/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BillableIndicator } from "@/components/billable-indicator";
 import { FormAlert } from "@/components/form-feedback";
 import { formatOverlapConflict } from "@/components/overlap-confirmation";
+import { ProjectFormModal, type CreatedProjectSelection } from "@/components/project-form-modal";
 import { ProjectSelect } from "@/components/project-select";
 import { TimerActionButton } from "@/components/timer-action-button";
 import { TimerDurationEditor } from "@/components/timer-duration-editor";
 import { useI18n } from "@/lib/i18n";
 import { useStore, useTimerTicker } from "@/lib/store";
+import { focusTimerTaskInput } from "@/lib/timer-input";
 
 export function TrackerBar() {
   const {
     timer,
     entries,
     projects,
+    can,
     startTimer,
     updateTimer,
     setTimerElapsed,
@@ -35,10 +38,17 @@ export function TrackerBar() {
   const { elapsed } = useTimerTicker();
   const { locale, t, error } = useI18n();
   const [task, setTask] = useState("");
+  const taskInputRef = useRef<HTMLInputElement>(null);
+  const projectTriggerRef = useRef<HTMLDivElement>(null);
+  const [projectValidationVisible, setProjectValidationVisible] = useState(false);
   const [activeTask, setActiveTask] = useState(timer.task);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [billable, setBillable] = useState(false);
   const [timerError, setTimerError] = useState<string | null>(null);
+  const [projectFormOpen, setProjectFormOpen] = useState(false);
+  const [projectInitialName, setProjectInitialName] = useState("");
+  const [pendingCreatedProject, setPendingCreatedProject] =
+    useState<CreatedProjectSelection | null>(null);
   const active = timer.status !== "idle";
   const taskSuggestions = useMemo(() => {
     const uniqueTasks = new Map<string, string>();
@@ -65,7 +75,22 @@ export function TrackerBar() {
     setTimerError(result.success ? null : result.error);
   };
 
+  useEffect(() => {
+    if (!pendingCreatedProject) return;
+    if (!projects.some((project) => project.id === pendingCreatedProject.id)) return;
+
+    if (timer.status !== "idle") {
+      const result = updateTimer({ projectId: pendingCreatedProject.id });
+      setTimerError(result.success ? null : result.error);
+    } else {
+      setProjectId(pendingCreatedProject.id);
+      setBillable(pendingCreatedProject.billable);
+    }
+    setPendingCreatedProject(null);
+  }, [pendingCreatedProject, projects, timer.status, updateTimer]);
+
   const updateTaskValue = (value: string) => {
+    taskInputRef.current?.setCustomValidity("");
     if (!active) {
       setTask(value);
       return;
@@ -85,6 +110,7 @@ export function TrackerBar() {
           className="grid-flow-row w-full max-w-full gap-1 grid-cols-1 sm:grid-flow-col sm:grid-cols-[minmax(0,1fr)_auto_minmax(11rem,15rem)_auto_auto_auto]"
         >
           <ComboBox
+            isRequired
             allowsCustomValue
             className="min-w-0"
             fullWidth
@@ -100,6 +126,8 @@ export function TrackerBar() {
             <Label className="sr-only">{t("What are you working on?")}</Label>
             <ComboBox.InputGroup className="w-full">
               <Input
+                ref={taskInputRef}
+                data-timer-task-input
                 className="rounded-s-[calc(var(--radius)*3)] !pe-3"
                 placeholder={t("What are you working on?")}
                 variant="secondary"
@@ -137,12 +165,29 @@ export function TrackerBar() {
           <div className="min-w-0">
             <Label className="sr-only">{t("Project")}</Label>
             <ProjectSelect
+              required
+              triggerRef={projectTriggerRef}
+              validationMessage={
+                projectValidationVisible && !(active ? timer.projectId : projectId)
+                  ? t("Select a project before starting the timer.")
+                  : null
+              }
+              onValidationDismiss={() => setProjectValidationVisible(false)}
               ariaLabel={t("Project")}
               value={(active ? timer.projectId : projectId) ?? "none"}
               allowArchivedId={active ? timer.projectId : null}
               variant="secondary"
               showClientName
+              {...(can("manage-projects")
+                ? {
+                    onCreateProject: (initialName: string) => {
+                      setProjectInitialName(initialName);
+                      setProjectFormOpen(true);
+                    },
+                  }
+                : {})}
               onChange={(value) => {
+                setProjectValidationVisible(false);
                 const nextProjectId = value === "none" || value === "all" ? null : value;
                 if (active) {
                   updateActiveTimer({ projectId: nextProjectId });
@@ -175,13 +220,28 @@ export function TrackerBar() {
               status={timer.status}
               onPress={() => {
                 if (timer.status === "idle") {
+                  if (!task.trim()) {
+                    setProjectValidationVisible(false);
+                    setTimerError(null);
+                    focusTimerTaskInput(t("A task is required."));
+                    return;
+                  }
+                  if (!projectId) {
+                    setTimerError(null);
+                    projectTriggerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+                    setProjectValidationVisible(true);
+                    return;
+                  }
                   const result = startTimer(task, projectId, billable);
                   setTimerError(result.success ? null : result.error);
                   return;
                 }
 
                 if (timer.status === "running") pauseTimer();
-                else resumeTimer();
+                else {
+                  const result = resumeTimer();
+                  setTimerError(result.success ? null : result.error);
+                }
               }}
             />
 
@@ -211,6 +271,7 @@ export function TrackerBar() {
                       });
                     }
                     setTask("");
+                    setTimerError(null);
                     setActiveTask("");
                     setProjectId(null);
                   }}
@@ -252,6 +313,16 @@ export function TrackerBar() {
       {timerError ? (
         <FormAlert title={t("We couldn't update the timer")} description={error(timerError)} />
       ) : null}
+
+      <ProjectFormModal
+        isOpen={projectFormOpen}
+        initialName={projectInitialName}
+        onOpenChange={(open) => {
+          setProjectFormOpen(open);
+          if (!open) setProjectInitialName("");
+        }}
+        onCreated={setPendingCreatedProject}
+      />
     </div>
   );
 }

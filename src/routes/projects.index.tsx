@@ -2,11 +2,7 @@ import { AlertDialog } from "@heroui/react/alert-dialog";
 import { Avatar } from "@heroui/react/avatar";
 import { Button } from "@heroui/react/button";
 import { Chip } from "@heroui/react/chip";
-import { ColorSwatchPicker } from "@heroui/react/color-swatch-picker";
 import { EmptyState } from "@heroui/react/empty-state";
-import { FieldError } from "@heroui/react/field-error";
-import { Form } from "@heroui/react/form";
-import { Input } from "@heroui/react/input";
 import { Label } from "@heroui/react/label";
 import { Modal } from "@heroui/react/modal";
 import { SearchField } from "@heroui/react/search-field";
@@ -16,11 +12,8 @@ import { TagGroup } from "@heroui/react/tag-group";
 import { ButtonGroup } from "@heroui/react/button-group";
 import { Dropdown } from "@heroui/react/dropdown";
 import { Table } from "@heroui/react/table";
-import { TextField } from "@heroui/react/textfield";
-import { ToggleButton } from "@heroui/react/toggle-button";
-import { ToggleButtonGroup } from "@heroui/react/toggle-button-group";
 import { Typography } from "@heroui/react/typography";
-import { useFilter, parseColor } from "@heroui/react/rac";
+import { useFilter } from "@heroui/react/rac";
 import { toast } from "@heroui/react/toast";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -45,13 +38,13 @@ import { RouterLink } from "@/components/router-link";
 import { FormAlert } from "@/components/form-feedback";
 import { ModalLayout } from "@/components/modal-layout";
 import { ModalTriggerRegistration } from "@/components/overlay-trigger-registration";
-import { ModalSelect } from "@/components/modal-select";
+import { ProjectFormModal } from "@/components/project-form-modal";
 import { EmptyBlock } from "@/components/states";
 import { formatDate, formatDuration } from "@/lib/format";
 import { getSessionDefaultAvatarUrl } from "@/lib/default-avatar";
 import { useI18n } from "@/lib/i18n";
 import type { Project } from "@/lib/domain";
-import { defaultProjectColor, projectColorOptions, projectColorValue } from "@/lib/project-colors";
+import { projectColorValue } from "@/lib/project-colors";
 import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/projects/")({
@@ -90,11 +83,6 @@ function ProjectsPage() {
   const [filter, setFilter] = useState<string>("active");
   const [newOpen, setNewOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [name, setName] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [projectColor, setProjectColor] = useState(defaultProjectColor);
-  const [projectBillable, setProjectBillable] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [pendingArchive, setPendingArchive] = useState<Project | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
@@ -118,51 +106,13 @@ function ProjectsPage() {
     entries.filter((e) => e.projectId === id).reduce((sum, e) => sum + e.seconds, 0);
 
   const openProjectForm = (project?: Project) => {
-    setCreateError(null);
     setEditingProject(project ?? null);
-    setName(project?.name ?? "");
-    setClientId(project?.clientId ?? "");
-    setProjectColor(projectColorValue(project?.color));
-    setProjectBillable(project?.billable ?? false);
-    setAssignedMemberIds(project?.memberIds ?? [currentUserId]);
-    setMemberQuery("");
     setNewOpen(true);
   };
 
   const closeProjectForm = () => {
     setNewOpen(false);
     setEditingProject(null);
-    setCreateError(null);
-    setMemberQuery("");
-  };
-
-  const saveProject = () => {
-    if (!name.trim() || !clientId) return;
-    const result = editingProject
-      ? updateProject(editingProject.id, {
-          name: name.trim(),
-          clientId,
-          billable: projectBillable,
-          color: projectColor,
-          memberIds: assignedMemberIds,
-        })
-      : addProject({
-          name: name.trim(),
-          clientId,
-          billable: projectBillable,
-          status: "active",
-          color: projectColor,
-          lastActivity: today,
-          memberIds: assignedMemberIds,
-        });
-    if (!result.success) {
-      setCreateError(error(result.error));
-      return;
-    }
-    toast.success(t(editingProject ? "Project updated" : "Project is ready"), {
-      description: name.trim(),
-    });
-    closeProjectForm();
   };
 
   const duplicateProject = (project: Project) => {
@@ -665,187 +615,14 @@ function ProjectsPage() {
         </AlertDialog.Backdrop>
       </AlertDialog>
 
-      <Modal
+      <ProjectFormModal
         isOpen={newOpen}
+        project={editingProject}
         onOpenChange={(open) => {
           if (open) setNewOpen(true);
           else closeProjectForm();
         }}
-      >
-        <ModalTriggerRegistration />
-        <Modal.Backdrop>
-          <Modal.Container size="sm">
-            <Modal.Dialog>
-              <Modal.CloseTrigger />
-              <ModalLayout.Header>
-                {t(editingProject ? "Edit project" : "New project")}
-              </ModalLayout.Header>
-              <Form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  saveProject();
-                }}
-              >
-                <ModalLayout.Body>
-                  {createError ? (
-                    <FormAlert
-                      title={t("We couldn't create this project")}
-                      description={createError}
-                    />
-                  ) : null}
-
-                  <div className="flex min-w-0 items-end gap-3">
-                    <TextField
-                      isRequired
-                      fullWidth
-                      className="min-w-0 flex-1"
-                      name="project-name"
-                      value={name}
-                      validate={(value) => (value.trim() ? null : t("Project name is required"))}
-                      onChange={(value) => {
-                        setName(value);
-                        setCreateError(null);
-                      }}
-                    >
-                      <Label>{t("Name")}</Label>
-                      <Input variant="secondary" placeholder={t("e.g. Brand refresh")} />
-                      <FieldError />
-                    </TextField>
-
-                    <ToggleButtonGroup
-                      aria-label={t("Billable")}
-                      size="sm"
-                      className="shrink-0 gap-0.5"
-                      selectionMode="multiple"
-                    >
-                      <ToggleButton
-                        aria-label={t("Billable")}
-                        className="size-9 min-h-9 min-w-9"
-                        isIconOnly
-                        isSelected={projectBillable}
-                        onChange={(selected: boolean) => setProjectBillable(selected)}
-                      >
-                        <BillableIndicator billable={projectBillable} mode="icon" size="md" />
-                      </ToggleButton>
-                    </ToggleButtonGroup>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>{t("Project color")}</Label>
-                    <ColorSwatchPicker
-                      aria-label={t("Project color")}
-                      value={parseColor(projectColorValue(projectColor))}
-                      onChange={(color) =>
-                        setProjectColor(typeof color === "string" ? color : color.toString("hex"))
-                      }
-                      size="md"
-                    >
-                      {projectColorOptions.map((option) => (
-                        <ColorSwatchPicker.Item
-                          key={option.id}
-                          color={parseColor(option.value)}
-                          aria-label={t(option.label)}
-                        >
-                          <ColorSwatchPicker.Swatch />
-                          <ColorSwatchPicker.Indicator />
-                        </ColorSwatchPicker.Item>
-                      ))}
-                    </ColorSwatchPicker>
-                  </div>
-
-                  <ModalSelect
-                    label={t("Client")}
-                    value={clientId || "none"}
-                    options={[
-                      { id: "none", label: t("Select a client"), isDisabled: true },
-                      ...clients.map((client) => ({ id: client.id, label: client.name })),
-                    ]}
-                    onChange={(value) => {
-                      setClientId(value === "none" ? "" : value);
-                      setCreateError(null);
-                    }}
-                  />
-
-                  <div className="space-y-2">
-                    <Label>{t("Project members")}</Label>
-                    <Dropdown>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        aria-label={t("Add project members")}
-                        className="h-9 w-full justify-between gap-2 px-3"
-                      >
-                        <span className="truncate text-sm">{t("Add members")}</span>
-                        <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
-                      </Button>
-                      <Dropdown.Popover
-                        className="max-w-[calc(100vw-2rem)] min-w-0"
-                        style={{ width: "var(--trigger-width)", maxWidth: "calc(100vw - 2rem)" }}
-                        onOpenChange={(open) => {
-                          if (!open) setMemberQuery("");
-                        }}
-                      >
-                        <div className="flex flex-col gap-2 p-2">
-                          <SearchField
-                            autoFocus
-                            aria-label={t("Search members")}
-                            name="new-project-member-search"
-                            value={memberQuery}
-                            onChange={setMemberQuery}
-                            variant="secondary"
-                          >
-                            <SearchField.Group>
-                              <SearchField.SearchIcon />
-                              <SearchField.Input placeholder={`${t("Search members")}...`} />
-                              <SearchField.ClearButton />
-                            </SearchField.Group>
-                          </SearchField>
-                          {memberSearchResults.length === 0 ? (
-                            <EmptyState>{t("No matching active members")}</EmptyState>
-                          ) : (
-                            <Dropdown.Menu
-                              aria-label={t("Active members")}
-                              selectionMode="single"
-                              onAction={(key) => addMember(String(key))}
-                              className="max-h-60 overflow-y-auto"
-                            >
-                              {memberSearchResults.map((member) => (
-                                <Dropdown.Item
-                                  key={member.id}
-                                  id={member.id}
-                                  textValue={`${member.name} ${member.email}`}
-                                >
-                                  <Avatar size="sm" className="shrink-0">
-                                    <Avatar.Fallback>{member.initials}</Avatar.Fallback>
-                                  </Avatar>
-                                  <div className="min-w-0">
-                                    <Typography type="body-sm" truncate>
-                                      {member.name}
-                                    </Typography>
-                                  </div>
-                                </Dropdown.Item>
-                              ))}
-                            </Dropdown.Menu>
-                          )}
-                        </div>
-                      </Dropdown.Popover>
-                    </Dropdown>
-                    <div className="pt-1">{renderAssignedMemberTags()}</div>
-                  </div>
-                </ModalLayout.Body>
-                <ModalLayout.Footer>
-                  <Button slot="close" type="button" variant="secondary">
-                    {t("Cancel")}
-                  </Button>
-                  <Button type="submit" isDisabled={!name.trim() || !clientId}>
-                    {t(editingProject ? "Save changes" : "Create project")}
-                  </Button>
-                </ModalLayout.Footer>
-              </Form>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      />
 
       <Modal
         isOpen={pendingMembers !== null}

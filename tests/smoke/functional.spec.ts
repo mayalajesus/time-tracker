@@ -5,6 +5,8 @@ import { signInAs } from "../support/qa-auth";
 const marker = `E2E ${Date.now()}`;
 const clientName = `${marker} Client`;
 const projectName = `${marker} Project`;
+const trackerProjectName = `${marker} Tracker Project`;
+const activeTimerProjectName = `${marker} Active Timer Project`;
 
 function waitForAccountSync(page: import("@playwright/test").Page) {
   return page.waitForResponse((response) => {
@@ -17,12 +19,30 @@ function waitForAccountSync(page: import("@playwright/test").Page) {
   });
 }
 
+async function createProjectFromTracker(page: import("@playwright/test").Page, name: string) {
+  const trackerBar = page.locator("[data-tracker-bar]");
+  await trackerBar.locator('[data-project-select] [data-slot="autocomplete-trigger"]').click();
+  await page.getByLabel(/Search projects|Buscar projetos/).fill(name);
+  await page.getByRole("button", { name: /Create new project|Criar novo projeto/ }).click();
+
+  const projectDialog = page.getByRole("dialog");
+  await expect(projectDialog.getByLabel(/Name|Nome/, { exact: true })).toHaveValue(name);
+  await projectDialog.getByRole("button", { name: /Client|Cliente/, exact: true }).click();
+  await page.getByRole("menuitemradio", { name: clientName, exact: true }).click();
+  const projectSync = waitForAccountSync(page);
+  await projectDialog.getByRole("button", { name: /Create project|Criar projeto/ }).click();
+  await projectSync;
+  await expect(projectDialog).toHaveCount(0);
+  await expect(trackerBar.locator("[data-project-select]")).toContainText(name);
+  return trackerBar;
+}
+
 test.afterAll(async () => {
   await cleanQaData(marker);
 });
 
 test("owner persists client, project and timer data in Neon", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await signInAs(page, "owner");
 
   await page.goto("/clients");
@@ -51,13 +71,15 @@ test("owner persists client, project and timer data in Neon", async ({ page }) =
   await expect(page.getByRole("link", { name: projectName, exact: true })).toBeVisible();
 
   await page.goto("/tracker");
-  const trackerBar = page.locator("[data-tracker-bar]");
+  const trackerBar = await createProjectFromTracker(page, trackerProjectName);
   await page
     .getByRole("combobox", {
       name: /What are you working on\?|No que você está trabalhando\?/,
     })
     .fill(`${marker} Timer`);
   await trackerBar.getByRole("button", { name: /Start|Iniciar/, exact: true }).click();
+  await expect(trackerBar.getByRole("button", { name: /Stop|Parar/, exact: true })).toBeVisible();
+  await createProjectFromTracker(page, activeTimerProjectName);
   await expect(trackerBar.getByRole("button", { name: /Stop|Parar/, exact: true })).toBeVisible();
   await page.waitForTimeout(1100);
   const timerSync = waitForAccountSync(page);

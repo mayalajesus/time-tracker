@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
+import { focusTimerTaskInput } from "@/lib/timer-input";
 import { ModalTriggerRegistration } from "@/components/overlay-trigger-registration";
 import { formatOverlapConflict } from "@/components/overlap-confirmation";
 
@@ -45,7 +46,7 @@ export function CommandMenu({
   onLogTime: () => void;
 }) {
   const navigate = useNavigate();
-  const { projects, clients, timer, startTimer, stopTimer } = useStore();
+  const { projects, clients, timer, stopTimer } = useStore();
   const { locale, t, error } = useI18n();
   const [query, setQuery] = useState("");
 
@@ -118,11 +119,20 @@ export function CommandMenu({
       {
         id: "action-timer",
         label: timer.status === "idle" ? t("Start timer") : t("Stop timer"),
-        hint: timer.status === "idle" ? t("Begin tracking now") : t("Save the running entry"),
+        hint:
+          timer.status === "idle"
+            ? t("Enter a task name and select a project before starting.")
+            : t("Save the running entry"),
         icon: <Play className="size-4" />,
         group: "Actions",
         run: () => {
-          const result = timer.status === "idle" ? startTimer("Quick task", null) : stopTimer();
+          if (timer.status === "idle") {
+            void navigate({ to: "/tracker" }).then(() => {
+              requestAnimationFrame(() => focusTimerTaskInput(t("A task is required.")));
+            });
+            return;
+          }
+          const result = stopTimer();
           if (!result.success) {
             toast.danger(error(result.error));
           } else if (result.warning) {
@@ -175,19 +185,7 @@ export function CommandMenu({
     }));
 
     return [...actions, ...nav, ...projectCommands, ...clientCommands];
-  }, [
-    clients,
-    error,
-    locale,
-    navigate,
-    onLogTime,
-    projects,
-    query,
-    startTimer,
-    stopTimer,
-    t,
-    timer.status,
-  ]);
+  }, [clients, error, locale, navigate, onLogTime, projects, query, stopTimer, t, timer.status]);
 
   const filtered = commands.filter((c) =>
     `${c.label} ${c.group}`.toLowerCase().includes(query.trim().toLowerCase()),
