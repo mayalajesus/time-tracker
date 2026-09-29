@@ -393,8 +393,9 @@ async function ensureProfile(client, user, config) {
     [user.id, config.databaseProvider, name, email, initials],
   );
   await client.query(
-    `insert into public.user_preferences (user_id) values ($1) on conflict (user_id) do nothing`,
-    [user.id],
+    `insert into public.user_preferences (user_id, language) values ($1, $2)
+     on conflict (user_id) do nothing`,
+    [user.id, config.initialLanguage === "pt-BR" ? "pt-BR" : "en-US"],
   );
   if (user.avatarUrl && (await hasColumn(client, "user_preferences", "avatar_data_url"))) {
     await client.query(
@@ -1704,6 +1705,7 @@ async function updatePreferences(client, user, config, body) {
 }
 
 async function operation(request, user, config, body) {
+  config = { ...config, initialLanguage: body.initialLanguage === "pt-BR" ? "pt-BR" : "en-US" };
   const pool = getPool(config);
   const client = await pool.connect();
   let discardClient = false;

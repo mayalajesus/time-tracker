@@ -3,7 +3,18 @@ import type { ReactNode } from "react";
 
 export type Locale = "en-US" | "pt-BR";
 
-export const defaultLocale: Locale = "en-US";
+export function getSystemLocale(): Locale {
+  if (typeof navigator === "undefined") return "en-US";
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const language of languages) {
+    const base = language.toLowerCase().split(/[-_]/)[0];
+    if (base === "pt") return "pt-BR";
+    if (base === "en") return "en-US";
+  }
+  return "en-US";
+}
+
+export const defaultLocale: Locale = getSystemLocale();
 
 export const localeOptions: Array<{ id: Locale; label: string }> = [
   { id: "en-US", label: "English" },

@@ -1,5 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { getAuthClient } from "./auth-client";
+import { getSystemLocale } from "./i18n";
 import type {
   AccountDataSource,
   AccountDeletionStatus,
@@ -66,7 +67,7 @@ async function request<T>(
         "content-type": "application/json",
         authorization: `Bearer ${await token(currentSession.data)}`,
       },
-      body: JSON.stringify({ operation, ...payload }),
+      body: JSON.stringify({ operation, ...payload, initialLanguage: getSystemLocale() }),
     });
     const body = (await response.json().catch((error: unknown) => {
       if (controller.signal.aborted) throw error;
