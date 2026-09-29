@@ -30,10 +30,10 @@ export function AuthPage({
     >
       <section className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <Typography type="h1" weight="semibold">
+          <Typography type="h1" weight="semibold" align="center">
             {title}
           </Typography>
-          <Typography type="body-sm" color="muted" className="mt-2">
+          <Typography type="body-sm" color="muted" align="center" className="mt-2">
             {description}
           </Typography>
         </div>

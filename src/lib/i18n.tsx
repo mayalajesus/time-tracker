@@ -1078,6 +1078,15 @@ const ptBR: Record<string, string> = {
   "Confirm your password": "Confirme sua senha",
   "Password is required": "A senha é obrigatória",
   "Password requirements": "Requisitos da senha",
+  "We couldn't send the reset email": "Não foi possível enviar o e-mail de recuperação",
+  "We couldn't send the reset email. Please try again.":
+    "Não foi possível enviar o e-mail de recuperação. Tente novamente.",
+  "If an account is associated with": "Se houver uma conta associada a",
+  ", you will receive a link to reset your password.":
+    ", você receberá um link para redefinir sua senha.",
+  "Resend in {seconds}s": "Reenviar em {seconds}s",
+  "Resend email": "Reenviar e-mail",
+  "Correct email": "Corrigir e-mail",
   "At least 8 characters": "Pelo menos 8 caracteres",
   "At least one uppercase letter": "Pelo menos uma letra maiúscula",
   "At least one number": "Pelo menos um número",
