@@ -23,11 +23,15 @@ function WorkspaceLogo({
   return (
     <Avatar
       aria-hidden="true"
-      className={`${enlarged ? "size-7" : "size-6"} shrink-0 overflow-hidden rounded-full`}
+      className={`${enlarged ? "size-10" : "size-6"} shrink-0 overflow-hidden rounded-full`}
       size="sm"
     >
       {workspace.logoDataUrl ? (
-        <Avatar.Image alt="" src={workspace.logoDataUrl} className="object-contain" />
+        <Avatar.Image
+          alt=""
+          src={workspace.logoDataUrl}
+          className={enlarged ? "size-full object-cover" : "object-contain"}
+        />
       ) : null}
       <Avatar.Fallback>
         <Layers className="size-4" />
