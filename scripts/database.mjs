@@ -27,6 +27,26 @@ function checksum(sql) {
   return createHash("sha256").update(sql.replace(/\r\n?/g, "\n")).digest("hex");
 }
 
+// Commit 08c9dcc restored the original advisory-lock prefix in these files.
+// Some QA databases had already applied its parent's versions. Accept only
+// these audited pairs; retain the recorded checksums and reject any new drift.
+const historicalChecksums = new Map([
+  [
+    "common/20260831090000_active_personal_workspace.sql",
+    {
+      current: "3bc3f2e17d2543a933aff91137eeac4be2e4e6340585a85e3d4e85108ab95528",
+      applied: "39fb878cb17232cd977d68c8040ea0a519a6a9a9df6cf5f4b7931211818f4e42",
+    },
+  ],
+  [
+    "common/20260831092000_personal_owner_workspace.sql",
+    {
+      current: "23058054cc3ec7b7297a44f688af05272d01b229d97c62b1a21352e38d8c4787",
+      applied: "210005a134786cbc2d443277e2d4fe4fbc3bcd0096453449c8e80770dbc7ed01",
+    },
+  ],
+]);
+
 async function migrationPlan(provider) {
   const plan = (await sqlFiles(path.join(root, "db", "migrations"))).map((file) => ({
     scope: "common",
@@ -68,12 +88,17 @@ async function migrate(client, provider, dryRun) {
     );
 
     if (applied.rowCount) {
-      if (applied.rows[0].checksum !== digest) {
+      const historical = historicalChecksums.get(`${migration.scope}/${filename}`);
+      const knownHistoricalVersion =
+        historical?.current === digest && historical.applied === applied.rows[0].checksum;
+      if (applied.rows[0].checksum !== digest && !knownHistoricalVersion) {
         throw new Error(
           `Migration ${migration.scope}/${filename} changed after it was applied. Add a new migration instead.`,
         );
       }
-      process.stdout.write(`skip ${migration.scope}/${filename}\n`);
+      process.stdout.write(
+        `skip ${migration.scope}/${filename}${knownHistoricalVersion ? " (verified historical version)" : ""}\n`,
+      );
       continue;
     }
 
