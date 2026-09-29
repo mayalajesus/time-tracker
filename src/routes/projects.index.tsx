@@ -133,15 +133,16 @@ function ProjectsPage() {
     toast.success(t("Project duplicated"), { description: project.name });
   };
 
-  const toggleProjectStatus = (projectId: string, isActive: boolean, name: string) => {
-    const result = updateProject(projectId, { status: isActive ? "on-hold" : "active" });
+  const toggleProjectStatus = (project: Project) => {
+    const nextStatus = project.status === "active" ? "on-hold" : "active";
+    const result = updateProject(project.id, { status: nextStatus });
     if (!result.success) {
       setStatusError(error(result.error));
       return;
     }
     setStatusError(null);
-    toast.success(t(isActive ? "Project is on hold" : "Project is active again"), {
-      description: name,
+    toast.success(t(nextStatus === "on-hold" ? "Project is on hold" : "Project is active again"), {
+      description: project.name,
     });
   };
 
@@ -519,11 +520,7 @@ function ProjectsPage() {
                           if (key === "edit") openProjectForm(project);
                           if (key === "duplicate") duplicateProject(project);
                           if (key === "status") {
-                            toggleProjectStatus(
-                              project.id,
-                              project.status !== "active",
-                              project.name,
-                            );
+                            toggleProjectStatus(project);
                           }
                           if (key === "billable") toggleProjectBillable(project);
                           if (key === "archive") setPendingArchive(project);
