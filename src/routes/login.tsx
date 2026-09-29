@@ -1,4 +1,6 @@
 import { Button } from "@heroui/react/button";
+import { Checkbox } from "@heroui/react/checkbox";
+import { Label } from "@heroui/react/label";
 import { Form } from "@heroui/react/form";
 import { Link } from "@heroui/react/link";
 import { createFileRoute } from "@tanstack/react-router";
@@ -24,6 +26,7 @@ function LoginPage() {
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -37,7 +40,12 @@ function LoginPage() {
     event.preventDefault();
     setError(null);
     setBusy(true);
-    const result = await signInWithPassword(email.trim(), password, captchaToken ?? undefined);
+    const result = await signInWithPassword(
+      email.trim(),
+      password,
+      captchaToken ?? undefined,
+      rememberMe,
+    );
     setBusy(false);
     if (!result.success) {
       setError(result.error);
@@ -63,7 +71,7 @@ function LoginPage() {
       <AuthError message={error} />
       <GoogleAuthButton onPress={continueWithGoogle} isDisabled={busy} />
       <AuthDivider />
-      <Form className="space-y-4" onSubmit={submit}>
+      <Form className="flex flex-col gap-5" onSubmit={submit}>
         <AuthField
           id="login-email"
           label={t("Email")}
@@ -84,6 +92,7 @@ function LoginPage() {
         />
         <AuthField
           id="login-password"
+          allowPasswordToggle
           label={t("Password")}
           type="password"
           value={password}
@@ -95,10 +104,25 @@ function LoginPage() {
           placeholder={t("Enter your password")}
           validate={(value) => (value ? null : t("Password is required"))}
         />
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Checkbox
+            name="remember-me"
+            isSelected={rememberMe}
+            onChange={setRememberMe}
+            isDisabled={busy}
+          >
+            <Checkbox.Content className="items-center gap-2">
+              <Checkbox.Control>
+                <Checkbox.Indicator />
+              </Checkbox.Control>
+              <Label>{t("Remember me")}</Label>
+            </Checkbox.Content>
+          </Checkbox>
           <Link href="/forgot-password">{t("Forgot password?")}</Link>
         </div>
-        <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
+        {isTurnstileConfigured ? (
+          <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
+        ) : null}
         <Button
           className="w-full"
           type="submit"

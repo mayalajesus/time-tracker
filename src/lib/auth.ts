@@ -40,6 +40,7 @@ export async function signInWithPassword(
   email: string,
   password: string,
   captchaToken?: string,
+  rememberMe = true,
 ): Promise<AuthResult<Session>> {
   const authClient = await requireClient();
   if (!authClient) return unavailable();
@@ -48,6 +49,7 @@ export async function signInWithPassword(
     response = await authClient.signInWithPassword({
       email,
       password,
+      rememberMe,
       ...(captchaToken ? { options: { captchaToken } } : {}),
     });
   } catch (error) {

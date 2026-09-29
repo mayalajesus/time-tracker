@@ -1,4 +1,5 @@
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { authStorage, setRememberSession } from "./auth-storage";
 import {
   authProvider,
   isSupabaseConfigured,
@@ -22,6 +23,7 @@ export type AuthClient = {
   signInWithPassword: (credentials: {
     email: string;
     password: string;
+    rememberMe?: boolean;
     options?: { captchaToken?: string };
   }) => Promise<AuthResponse>;
   signUp: (credentials: {
@@ -54,6 +56,7 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
     const supabase = createClient(supabaseUrl, supabasePublishableKey, {
       auth: {
         persistSession: true,
+        storage: authStorage,
         autoRefreshToken: true,
         detectSessionInUrl: true,
       },
@@ -62,7 +65,10 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
       getSession: () => supabase.auth.getSession(),
       getJWTToken: () => Promise.resolve(null),
       onAuthStateChange: (callback) => supabase.auth.onAuthStateChange(callback),
-      signInWithPassword: (credentials) => supabase.auth.signInWithPassword(credentials),
+      signInWithPassword: ({ rememberMe = true, ...credentials }) => {
+        setRememberSession(rememberMe);
+        return supabase.auth.signInWithPassword(credentials);
+      },
       signUp: (credentials) => supabase.auth.signUp(credentials),
       signInWithOAuth: (options) => supabase.auth.signInWithOAuth(options),
       signOut: () => supabase.auth.signOut(),
@@ -82,8 +88,21 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
     getJWTToken: () => neonAuth.getJWTToken(false),
     onAuthStateChange: (callback) =>
       neonAuth.onAuthStateChange(callback) as unknown as AuthSubscription,
-    signInWithPassword: (credentials) =>
-      neonAuth.signInWithPassword(credentials) as unknown as Promise<AuthResponse>,
+    signInWithPassword: async ({ rememberMe = true, ...credentials }) => {
+      if (rememberMe)
+        return neonAuth.signInWithPassword(credentials) as unknown as Promise<AuthResponse>;
+      const result = await neonAuth.getBetterAuthInstance().signIn.email({
+        email: credentials.email,
+        password: credentials.password,
+        rememberMe: false,
+      });
+      if (result.error)
+        return {
+          data: { session: null },
+          error: { message: result.error.message ?? "Unable to sign in." },
+        };
+      return neonAuth.getSession() as unknown as Promise<AuthResponse>;
+    },
     signUp: (credentials) => neonAuth.signUp(credentials) as unknown as Promise<AuthResponse>,
     signInWithOAuth: (options) =>
       neonAuth.signInWithOAuth(options) as unknown as Promise<{ error: ErrorLike }>,

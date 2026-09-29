@@ -2,11 +2,13 @@ import { Button } from "@heroui/react/button";
 import { Description } from "@heroui/react/description";
 import { FieldError } from "@heroui/react/field-error";
 import { Input } from "@heroui/react/input";
+import { InputGroup } from "@heroui/react/input-group";
+import { Eye, EyeSlash } from "@gravity-ui/icons";
 import { Label } from "@heroui/react/label";
 import { Separator } from "@heroui/react/separator";
 import { TextField } from "@heroui/react/textfield";
 import { Typography } from "@heroui/react/typography";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { FormAlert } from "@/components/form-feedback";
 import { RouterLink } from "@/components/router-link";
 import { getAuthReturnPath } from "@/lib/auth-redirect";
@@ -58,6 +60,7 @@ export function AuthField({
   validate,
   minLength,
   required = true,
+  allowPasswordToggle = false,
 }: {
   id: string;
   label: string;
@@ -66,27 +69,57 @@ export function AuthField({
   onChange: (value: string) => void;
   autoComplete?: string;
   placeholder?: string;
-  description?: string;
+  description?: ReactNode;
   validate?: (value: string) => string | null;
   minLength?: number;
   required?: boolean;
+  allowPasswordToggle?: boolean;
 }) {
+  const { t } = useI18n();
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const hasPasswordToggle = type === "password" && allowPasswordToggle;
   return (
     <TextField
       fullWidth
       isRequired={required}
       name={id}
-      type={type}
+      type={hasPasswordToggle && passwordVisible ? "text" : type}
       value={value}
       {...(minLength === undefined ? {} : { minLength })}
       {...(validate === undefined ? {} : { validate })}
       onChange={onChange}
     >
       <Label>{label}</Label>
-      <Input
-        {...(autoComplete === undefined ? {} : { autoComplete })}
-        {...(placeholder === undefined ? {} : { placeholder })}
-      />
+      {hasPasswordToggle ? (
+        <InputGroup>
+          <InputGroup.Input
+            {...(autoComplete === undefined ? {} : { autoComplete })}
+            {...(placeholder === undefined ? {} : { placeholder })}
+          />
+          <InputGroup.Suffix>
+            <Button
+              type="button"
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              aria-label={t(passwordVisible ? "Hide password" : "Show password")}
+              aria-pressed={passwordVisible}
+              onPress={() => setPasswordVisible((visible) => !visible)}
+            >
+              {passwordVisible ? (
+                <EyeSlash aria-hidden="true" className="size-4" />
+              ) : (
+                <Eye aria-hidden="true" className="size-4" />
+              )}
+            </Button>
+          </InputGroup.Suffix>
+        </InputGroup>
+      ) : (
+        <Input
+          {...(autoComplete === undefined ? {} : { autoComplete })}
+          {...(placeholder === undefined ? {} : { placeholder })}
+        />
+      )}
       {description ? <Description>{description}</Description> : null}
       <FieldError />
     </TextField>

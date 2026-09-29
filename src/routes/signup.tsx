@@ -1,4 +1,5 @@
 import { Button } from "@heroui/react/button";
+import { Check } from "@gravity-ui/icons";
 import { Form } from "@heroui/react/form";
 import { Typography } from "@heroui/react/typography";
 import { createFileRoute } from "@tanstack/react-router";
@@ -18,6 +19,24 @@ import { getAuthReturnPath } from "@/lib/auth-redirect";
 import { isTurnstileConfigured, TurnstileChallenge } from "@/components/turnstile";
 
 export const Route = createFileRoute("/signup")({ component: SignupPage });
+
+const passwordRequirements = [
+  {
+    label: "At least 8 characters",
+    error: "Password must be at least 8 characters.",
+    meets: (value: string) => value.length >= 8,
+  },
+  {
+    label: "At least one uppercase letter",
+    error: "Password must contain at least one uppercase letter.",
+    meets: (value: string) => /[A-Z]/.test(value),
+  },
+  {
+    label: "At least one number",
+    error: "Password must contain at least one number.",
+    meets: (value: string) => /[0-9]/.test(value),
+  },
+];
 
 function SignupPage() {
   const { session } = useAuth();
@@ -59,16 +78,11 @@ function SignupPage() {
       setError("Enter a valid email address");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (!/[A-Z]/.test(password)) {
-      setError("Password must contain at least one uppercase letter.");
-      return;
-    }
-    if (!/[0-9]/.test(password)) {
-      setError("Password must contain at least one number.");
+    const unmetRequirement = passwordRequirements.find(
+      (requirement) => !requirement.meets(password),
+    );
+    if (unmetRequirement) {
+      setError(unmetRequirement.error);
       return;
     }
     if (password !== confirmation) {
@@ -127,8 +141,8 @@ function SignupPage() {
         <>
           <GoogleAuthButton onPress={continueWithGoogle} isDisabled={busy} />
           <AuthDivider />
-          <Form className="space-y-4" onSubmit={submit}>
-            <div className="flex flex-col gap-4 sm:flex-row">
+          <Form className="flex flex-col gap-5" onSubmit={submit}>
+            <div className="flex flex-col gap-5 sm:flex-row sm:gap-4">
               <AuthField
                 id="signup-first-name"
                 label={t("First name")}
@@ -174,6 +188,7 @@ function SignupPage() {
             />
             <AuthField
               id="signup-password"
+              allowPasswordToggle
               label={t("Password")}
               type="password"
               value={password}
@@ -184,17 +199,43 @@ function SignupPage() {
               autoComplete="new-password"
               placeholder={t("Enter your password")}
               minLength={8}
-              description={t("Use at least 8 characters, one uppercase letter and one number.")}
+              description={
+                <span
+                  className="mt-1 block space-y-1.5"
+                  role="list"
+                  aria-label={t("Password requirements")}
+                >
+                  {passwordRequirements.map((requirement) => {
+                    const met = requirement.meets(password);
+                    return (
+                      <span
+                        key={requirement.label}
+                        role="listitem"
+                        className={`flex items-center gap-2 ${met ? "text-success" : "text-muted"}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${met ? "border-success bg-success/10" : "border-current"}`}
+                        >
+                          {met ? <Check className="size-3" /> : null}
+                        </span>
+                        <span className="sr-only">
+                          {t(met ? "Requirement met" : "Requirement not met")}:{" "}
+                        </span>
+                        {t(requirement.label)}
+                      </span>
+                    );
+                  })}
+                </span>
+              }
               validate={(value) => {
-                if (value.length < 8) return t("Password must be at least 8 characters.");
-                if (!/[A-Z]/.test(value))
-                  return t("Password must contain at least one uppercase letter.");
-                if (!/[0-9]/.test(value)) return t("Password must contain at least one number.");
-                return null;
+                const unmet = passwordRequirements.find((requirement) => !requirement.meets(value));
+                return unmet ? t(unmet.error) : null;
               }}
             />
             <AuthField
               id="signup-confirmation"
+              allowPasswordToggle
               label={t("Confirm password")}
               type="password"
               value={confirmation}
@@ -206,7 +247,9 @@ function SignupPage() {
               placeholder={t("Confirm your password")}
               validate={(value) => (value === password ? null : t("Passwords do not match."))}
             />
-            <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
+            {isTurnstileConfigured ? (
+              <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
+            ) : null}
             <Button
               className="w-full"
               type="submit"
