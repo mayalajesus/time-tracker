@@ -137,11 +137,10 @@ function SettingsPage() {
   const themeOptions: Array<{
     id: ThemeMode;
     label: string;
-    hint: string | null;
   }> = [
-    { id: "system", label: "System", hint: null },
-    { id: "light", label: "Light", hint: "Always use the light theme." },
-    { id: "dark", label: "Dark", hint: "Always use the dark theme." },
+    { id: "system", label: "System" },
+    { id: "light", label: "Light" },
+    { id: "dark", label: "Dark" },
   ];
 
   const savePreference = async (patch: Partial<typeof preferences>) => {
@@ -601,13 +600,6 @@ function SettingsPage() {
                 ))}
               </Tabs.List>
             </Tabs.ListContainer>
-            {themeOptions.map((option) =>
-              option.hint ? (
-                <Tabs.Panel key={option.id} className="px-0 pt-2" id={option.id}>
-                  {t(option.hint)}
-                </Tabs.Panel>
-              ) : null,
-            )}
           </Tabs>
         </div>
 
@@ -615,16 +607,17 @@ function SettingsPage() {
           {toggles.map((item) => (
             <div key={item.key} className="flex items-center gap-1.5">
               <Switch
+                className="shrink-0"
                 aria-label={t(item.title)}
                 isSelected={preferences[item.key]}
                 onChange={(selected: boolean) =>
                   savePreference({ [item.key]: selected } as Partial<typeof preferences>)
                 }
               >
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-                <Switch.Content className="min-w-0">
+                <Switch.Content className="flex min-w-0 items-center gap-2">
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
                   <Label>{t(item.title)}</Label>
                 </Switch.Content>
               </Switch>
