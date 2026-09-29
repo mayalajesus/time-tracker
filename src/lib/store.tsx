@@ -2109,11 +2109,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (member.role === "Admin" && role === "Member") {
         if (!can("manage-admins"))
           return { success: false, error: "Only the Owner can reassign Admin roles." };
-        if (
-          members.filter((candidate) => candidate.status === "active" && candidate.role === "Admin")
-            .length <= 1
-        )
-          return { success: false, error: "The last admin cannot be reassigned." };
       }
       setMembers((list) =>
         list.map((candidate) => (candidate.id === memberId ? { ...candidate, role } : candidate)),
