@@ -125,6 +125,8 @@ const ptBR: Record<string, string> = {
   Archived: "Arquivado",
   "New project": "Novo projeto",
   "All clients": "Todos os clientes",
+  "All team members": "Todos os membros",
+  "Non-billable": "Não faturável",
   "Filter by client": "Filtrar por cliente",
   "Change the filters or create a new project to get started.":
     "Altere os filtros ou crie um projeto para começar.",

@@ -238,6 +238,7 @@ function ReportFilterDropdown({
   onChange,
   searchable,
   multiple,
+  allLabel,
   separator = "button-group",
   className,
 }: {
@@ -248,6 +249,7 @@ function ReportFilterDropdown({
   onChange: (values: string[]) => void;
   searchable: boolean;
   multiple: boolean;
+  allLabel?: string;
   separator?: "button-group" | "vertical";
   className?: string;
 }) {
@@ -275,7 +277,7 @@ function ReportFilterDropdown({
         className="h-9 min-w-0 flex-1 justify-start gap-2"
       >
         <ReportFilterIcon>{icon}</ReportFilterIcon>
-        <ReportFilterValue>{selectedLabel(options, values, label)}</ReportFilterValue>
+        <ReportFilterValue>{selectedLabel(options, values, allLabel ?? label)}</ReportFilterValue>
       </Button>
       <GroupedDropdown>
         <Button
@@ -324,27 +326,42 @@ function ReportFilterDropdown({
               </SearchField>
             </div>
           ) : null}
-          {filteredOptions.length === 0 ? (
+          {filteredOptions.length === 0 && !allLabel ? (
             <EmptyState>{t("No results")}</EmptyState>
           ) : (
             <Dropdown.Menu
               aria-label={t("{label} options", { label })}
               className="max-h-64 overflow-y-auto"
               selectionMode={selectionMode}
-              selectedKeys={new Set(values)}
+              selectedKeys={new Set(allLabel && values.length === 0 ? ["__all__"] : values)}
               onSelectionChange={(keys) => {
                 if (keys === "all") {
-                  onChange(options.map((option) => option.id));
+                  onChange(allLabel ? [] : options.map((option) => option.id));
                   return;
                 }
-                const nextValues = [...keys].map(String);
+                if (allLabel && keys.has("__all__") && values.length > 0) {
+                  onChange([]);
+                  return;
+                }
+                const nextValues = [...keys]
+                  .map(String)
+                  .filter((key) => !allLabel || key !== "__all__");
                 onChange(multiple ? nextValues : nextValues.slice(-1));
               }}
             >
+              {allLabel ? (
+                <Dropdown.Item id="__all__" textValue={allLabel}>
+                  <Label>{allLabel}</Label>
+                  <Dropdown.ItemIndicator />
+                </Dropdown.Item>
+              ) : null}
               {filteredOptions.map((option) => (
                 <Dropdown.Item key={option.id} id={option.id} textValue={option.label}>
                   {option.billable !== undefined ? (
-                    <BillableIndicator billable={option.billable} mode="icon" />
+                    <Label className="flex items-center gap-2">
+                      <BillableIndicator billable={option.billable} mode="icon" />
+                      {option.label}
+                    </Label>
                   ) : option.project ? (
                     <ProjectLabel project={option.project} label={option.label} />
                   ) : (
@@ -362,6 +379,7 @@ function ReportFilterDropdown({
 }
 
 function ReportMultiSelect(props: {
+  allLabel?: string;
   label: string;
   icon: ReactNode;
   options: ReportFilterOption[];
@@ -708,6 +726,7 @@ export function ReportFiltersBar({
       <ReportMultiSelect
         key="member"
         label={t("Team")}
+        allLabel={t("All team members")}
         icon={<Persons aria-hidden="true" className={reportFilterIconClassName} />}
         options={memberOptions}
         values={values.memberIds}
@@ -758,7 +777,7 @@ export function ReportFiltersBar({
         options={[
           { id: "all", label: t("All billability"), billable: null },
           { id: "billable", label: t("Billable"), billable: true },
-          { id: "internal", label: t("Internal"), billable: false },
+          { id: "internal", label: t("Non-billable"), billable: false },
         ]}
         onChange={(billability) =>
           onChange({ billability: billability as ReportFilterValues["billability"] })
