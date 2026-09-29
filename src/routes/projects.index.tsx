@@ -9,7 +9,6 @@ import { SearchField } from "@heroui/react/search-field";
 import { Switch } from "@heroui/react/switch";
 import { Tag } from "@heroui/react/tag";
 import { TagGroup } from "@heroui/react/tag-group";
-import { ButtonGroup } from "@heroui/react/button-group";
 import { Dropdown } from "@heroui/react/dropdown";
 import { Table } from "@heroui/react/table";
 import { Typography } from "@heroui/react/typography";
@@ -80,7 +79,8 @@ function ProjectsPage() {
     deleteProject,
   } = useStore();
   const { locale, t, error } = useI18n();
-  const [filter, setFilter] = useState<string>("active");
+  const [filter, setFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const [newOpen, setNewOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -97,9 +97,10 @@ function ProjectsPage() {
     : false;
 
   const visible = projects.filter((p) => {
-    if (filter === "all") return true;
-    if (filter === "inactive") return p.status === "on-hold";
-    return p.status === filter;
+    return (
+      (filter === "all" || p.status === filter) &&
+      (clientFilter === "all" || p.clientId === clientFilter)
+    );
   });
   const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? "—";
   const projectSeconds = (id: string) =>
@@ -277,7 +278,6 @@ function ProjectsPage() {
   const projectFilterOptions = [
     { id: "all", label: t("All") },
     { id: "active", label: t("Active") },
-    { id: "inactive", label: t("Inactive") },
     { id: "archived", label: t("Archived") },
   ];
 
@@ -287,49 +287,75 @@ function ProjectsPage() {
         title={t("Projects")}
         description={t("Time tracked per project across the workspace.")}
         actions={
-          <>
-            <ButtonGroup variant="tertiary" size="sm" className="w-28 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Dropdown>
               <Button
                 type="button"
+                variant="tertiary"
+                size="sm"
                 aria-label={t("Filter projects")}
-                className="h-9 min-w-0 flex-1 justify-start px-3"
+                className="h-9 min-w-28 justify-between gap-2 px-3"
               >
                 {projectFilterOptions.find((option) => option.id === filter)?.label}
+                <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
               </Button>
-              <Dropdown>
-                <Button
-                  isIconOnly
-                  variant="tertiary"
-                  aria-label={t("Open project filters")}
-                  className="h-9 w-9 min-w-9 shrink-0 px-0"
+              <Dropdown.Popover>
+                <Dropdown.Menu
+                  aria-label={t("Filter projects")}
+                  selectionMode="single"
+                  selectedKeys={new Set([filter])}
+                  onAction={(key) => setFilter(String(key))}
                 >
-                  <ButtonGroup.Separator />
-                  <ChevronDown aria-hidden="true" className="size-4" />
-                </Button>
-                <Dropdown.Popover>
-                  <Dropdown.Menu
-                    aria-label={t("Filter projects")}
-                    selectionMode="single"
-                    selectedKeys={new Set([filter])}
-                    onAction={(key) => setFilter(String(key))}
-                  >
-                    {projectFilterOptions.map((option) => (
-                      <Dropdown.Item key={option.id} id={option.id} textValue={option.label}>
-                        <Label>{option.label}</Label>
-                        <Dropdown.ItemIndicator />
-                      </Dropdown.Item>
-                    ))}
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown>
-            </ButtonGroup>
+                  {projectFilterOptions.map((option) => (
+                    <Dropdown.Item key={option.id} id={option.id} textValue={option.label}>
+                      <Label>{option.label}</Label>
+                      <Dropdown.ItemIndicator />
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+            <Dropdown>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="sm"
+                aria-label={t("Filter by client")}
+                className="h-9 max-w-56 min-w-28 justify-between gap-2 px-3"
+              >
+                <span className="truncate">
+                  {clientFilter === "all" ? t("All clients") : clientName(clientFilter)}
+                </span>
+                <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+              </Button>
+              <Dropdown.Popover>
+                <Dropdown.Menu
+                  aria-label={t("Filter by client")}
+                  selectionMode="single"
+                  selectedKeys={new Set([clientFilter])}
+                  onAction={(key) => setClientFilter(String(key))}
+                  className="max-h-72 overflow-y-auto"
+                >
+                  <Dropdown.Item id="all" textValue={t("All clients")}>
+                    <Label>{t("All clients")}</Label>
+                    <Dropdown.ItemIndicator />
+                  </Dropdown.Item>
+                  {clients.map((client) => (
+                    <Dropdown.Item key={client.id} id={client.id} textValue={client.name}>
+                      <Label>{client.name}</Label>
+                      <Dropdown.ItemIndicator />
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
             {can("manage-projects") ? (
               <Button onPress={() => openProjectForm()}>
                 <Plus className="size-4" />
                 {t("New project")}
               </Button>
             ) : null}
-          </>
+          </div>
         }
       />
 
@@ -341,7 +367,7 @@ function ProjectsPage() {
         <EmptyBlock
           icon={<Folder className="size-5" />}
           title={t("No projects here")}
-          description={t("Change the status filter or create a new project to get started.")}
+          description={t("Change the filters or create a new project to get started.")}
           action={
             can("manage-projects") ? (
               <Button size="sm" variant="secondary" onPress={() => openProjectForm()}>
