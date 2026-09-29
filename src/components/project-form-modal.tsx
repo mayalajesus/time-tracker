@@ -7,22 +7,21 @@ import { FieldError } from "@heroui/react/field-error";
 import { Form } from "@heroui/react/form";
 import { Input } from "@heroui/react/input";
 import { Label } from "@heroui/react/label";
+import { ListBox } from "@heroui/react/list-box";
 import { Modal } from "@heroui/react/modal";
 import { useFilter, parseColor } from "@heroui/react/rac";
 import { SearchField } from "@heroui/react/search-field";
+import { Select } from "@heroui/react/select";
 import { Tag } from "@heroui/react/tag";
 import { TagGroup } from "@heroui/react/tag-group";
 import { TextField } from "@heroui/react/textfield";
-import { ToggleButton } from "@heroui/react/toggle-button";
-import { ToggleButtonGroup } from "@heroui/react/toggle-button-group";
+import { Switch } from "@heroui/react/switch";
 import { Typography } from "@heroui/react/typography";
 import { toast } from "@heroui/react/toast";
 import { ChevronDown } from "@gravity-ui/icons";
 import { useEffect, useMemo, useState } from "react";
-import { BillableIndicator } from "@/components/billable-indicator";
 import { FormAlert } from "@/components/form-feedback";
 import { ModalLayout } from "@/components/modal-layout";
-import { ModalSelect } from "@/components/modal-select";
 import { ModalTriggerRegistration } from "@/components/overlay-trigger-registration";
 import { getSessionDefaultAvatarUrl } from "@/lib/default-avatar";
 import type { Project } from "@/lib/domain";
@@ -163,7 +162,7 @@ export function ProjectFormModal({
                   <FormAlert title={t("We couldn't create this project")} description={formError} />
                 ) : null}
 
-                <div className="flex min-w-0 items-end gap-3">
+                <div className="min-w-0">
                   <TextField
                     isRequired
                     fullWidth
@@ -180,24 +179,20 @@ export function ProjectFormModal({
                     <Input variant="secondary" placeholder={t("e.g. Brand refresh")} />
                     <FieldError />
                   </TextField>
-
-                  <ToggleButtonGroup
-                    aria-label={t("Billable")}
-                    size="sm"
-                    className="shrink-0 gap-0.5"
-                    selectionMode="multiple"
-                  >
-                    <ToggleButton
-                      aria-label={t("Billable")}
-                      className="size-9 min-h-9 min-w-9"
-                      isIconOnly
-                      isSelected={projectBillable}
-                      onChange={(selected: boolean) => setProjectBillable(selected)}
-                    >
-                      <BillableIndicator billable={projectBillable} mode="icon" size="md" />
-                    </ToggleButton>
-                  </ToggleButtonGroup>
                 </div>
+
+                <Switch
+                  name="project-billable"
+                  isSelected={projectBillable}
+                  onChange={setProjectBillable}
+                >
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <Label>{t("Billable")}</Label>
+                  </Switch.Content>
+                </Switch>
 
                 <div className="space-y-2">
                   <Label>{t("Project color")}</Label>
@@ -222,131 +217,150 @@ export function ProjectFormModal({
                   </ColorSwatchPicker>
                 </div>
 
-                <ModalSelect
-                  label={t("Client")}
-                  value={clientId || "none"}
-                  options={[
-                    { id: "none", label: t("Select a client"), isDisabled: true },
-                    ...clients.map((client) => ({ id: client.id, label: client.name })),
-                  ]}
+                <Select
+                  isRequired
+                  fullWidth
+                  name="project-client"
+                  variant="secondary"
+                  placeholder={t("Select a client")}
+                  value={clientId || null}
                   onChange={(value) => {
-                    setClientId(value === "none" ? "" : value);
+                    setClientId(value === null ? "" : String(value));
                     setFormError(null);
                   }}
-                />
+                >
+                  <Label>{t("Client")}</Label>
+                  <Select.Trigger>
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox aria-label={t("Clients")}>
+                      {clients.map((client) => (
+                        <ListBox.Item key={client.id} id={client.id} textValue={client.name}>
+                          <Label>{client.name}</Label>
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                  <FieldError>{t("Choose an existing client for this project.")}</FieldError>
+                </Select>
 
-                <div className="space-y-2">
-                  <Label>{t("Project members")}</Label>
-                  <Dropdown>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      aria-label={t("Add project members")}
-                      className="h-9 w-full justify-between gap-2 px-3"
-                    >
-                      <span className="truncate text-sm">{t("Add members")}</span>
-                      <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
-                    </Button>
-                    <Dropdown.Popover
-                      className="w-[var(--trigger-width)] max-w-[calc(100vw-2rem)] min-w-0"
-                      onOpenChange={(open) => {
-                        if (!open) setMemberQuery("");
-                      }}
-                    >
-                      <div className="flex flex-col gap-2 p-2">
-                        <SearchField
-                          autoFocus
-                          aria-label={t("Search members")}
-                          name="new-project-member-search"
-                          value={memberQuery}
-                          onChange={setMemberQuery}
-                          variant="secondary"
-                        >
-                          <SearchField.Group>
-                            <SearchField.SearchIcon />
-                            <SearchField.Input placeholder={`${t("Search members")}...`} />
-                            <SearchField.ClearButton />
-                          </SearchField.Group>
-                        </SearchField>
-                        {memberSearchResults.length === 0 ? (
-                          <EmptyState>{t("No matching active members")}</EmptyState>
-                        ) : (
-                          <Dropdown.Menu
-                            aria-label={t("Active members")}
-                            selectionMode="single"
-                            onAction={(key) => addMember(String(key))}
-                            className="max-h-60 overflow-y-auto"
-                          >
-                            {memberSearchResults.map((member) => (
-                              <Dropdown.Item
-                                key={member.id}
-                                id={member.id}
-                                textValue={`${member.name} ${member.email}`}
-                              >
-                                <Avatar size="sm" className="shrink-0">
-                                  <Avatar.Fallback>{member.initials}</Avatar.Fallback>
-                                </Avatar>
-                                <div className="min-w-0">
-                                  <Typography type="body-sm" truncate>
-                                    {member.name}
-                                  </Typography>
-                                </div>
-                              </Dropdown.Item>
-                            ))}
-                          </Dropdown.Menu>
-                        )}
-                      </div>
-                    </Dropdown.Popover>
-                  </Dropdown>
-                  <div className="pt-1">
-                    <TagGroup
-                      aria-label={t("Selected members")}
-                      size="sm"
-                      onRemove={(keys) => {
-                        const removedIds = new Set(Array.from(keys, String));
-                        removedIds.delete(currentUserId);
-                        setAssignedMemberIds((current) =>
-                          current.filter((id) => !removedIds.has(id)),
-                        );
-                      }}
-                    >
-                      <Label>{t("Selected members")}</Label>
-                      <TagGroup.List
-                        items={assignedMembers}
-                        renderEmptyState={() => (
-                          <EmptyState className="p-1">{t("No members selected")}</EmptyState>
-                        )}
+                {project ? (
+                  <div className="space-y-2">
+                    <Label>{t("Project members")}</Label>
+                    <Dropdown>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        aria-label={t("Add project members")}
+                        className="h-9 w-full justify-between gap-2 px-3"
                       >
-                        {(member) => (
-                          <Tag key={member.id} id={member.id} textValue={member.name}>
-                            <Avatar className="size-4 shrink-0" size="sm">
-                              <Avatar.Image
-                                alt={member.name}
-                                src={
-                                  preferencesByUserId[member.id]?.avatarUrl ??
-                                  getSessionDefaultAvatarUrl(member.id)
-                                }
+                        <span className="truncate text-sm">{t("Add members")}</span>
+                        <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+                      </Button>
+                      <Dropdown.Popover
+                        className="w-[var(--trigger-width)] max-w-[calc(100vw-2rem)] min-w-0"
+                        onOpenChange={(open) => {
+                          if (!open) setMemberQuery("");
+                        }}
+                      >
+                        <div className="flex flex-col gap-2 p-2">
+                          <SearchField
+                            autoFocus
+                            aria-label={t("Search members")}
+                            name="new-project-member-search"
+                            value={memberQuery}
+                            onChange={setMemberQuery}
+                            variant="secondary"
+                          >
+                            <SearchField.Group>
+                              <SearchField.SearchIcon />
+                              <SearchField.Input placeholder={`${t("Search members")}...`} />
+                              <SearchField.ClearButton />
+                            </SearchField.Group>
+                          </SearchField>
+                          {memberSearchResults.length === 0 ? (
+                            <EmptyState>{t("No matching active members")}</EmptyState>
+                          ) : (
+                            <Dropdown.Menu
+                              aria-label={t("Active members")}
+                              selectionMode="single"
+                              onAction={(key) => addMember(String(key))}
+                              className="max-h-60 overflow-y-auto"
+                            >
+                              {memberSearchResults.map((member) => (
+                                <Dropdown.Item
+                                  key={member.id}
+                                  id={member.id}
+                                  textValue={`${member.name} ${member.email}`}
+                                >
+                                  <Avatar size="sm" className="shrink-0">
+                                    <Avatar.Fallback>{member.initials}</Avatar.Fallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <Typography type="body-sm" truncate>
+                                      {member.name}
+                                    </Typography>
+                                  </div>
+                                </Dropdown.Item>
+                              ))}
+                            </Dropdown.Menu>
+                          )}
+                        </div>
+                      </Dropdown.Popover>
+                    </Dropdown>
+                    <div className="pt-1">
+                      <TagGroup
+                        aria-label={t("Selected members")}
+                        size="sm"
+                        onRemove={(keys) => {
+                          const removedIds = new Set(Array.from(keys, String));
+                          removedIds.delete(currentUserId);
+                          setAssignedMemberIds((current) =>
+                            current.filter((id) => !removedIds.has(id)),
+                          );
+                        }}
+                      >
+                        <Label>{t("Selected members")}</Label>
+                        <TagGroup.List
+                          items={assignedMembers}
+                          renderEmptyState={() => (
+                            <EmptyState className="p-1">{t("No members selected")}</EmptyState>
+                          )}
+                        >
+                          {(member) => (
+                            <Tag key={member.id} id={member.id} textValue={member.name}>
+                              <Avatar className="size-4 shrink-0" size="sm">
+                                <Avatar.Image
+                                  alt={member.name}
+                                  src={
+                                    preferencesByUserId[member.id]?.avatarUrl ??
+                                    getSessionDefaultAvatarUrl(member.id)
+                                  }
+                                />
+                                <Avatar.Fallback>{member.initials}</Avatar.Fallback>
+                              </Avatar>
+                              <span className="max-w-40 truncate">{member.name}</span>
+                              <Tag.RemoveButton
+                                aria-label={t("Remove {name}", { name: member.name })}
+                                {...(member.id === currentUserId ? { className: "hidden" } : {})}
+                                isDisabled={member.id === currentUserId}
                               />
-                              <Avatar.Fallback>{member.initials}</Avatar.Fallback>
-                            </Avatar>
-                            <span className="max-w-40 truncate">{member.name}</span>
-                            <Tag.RemoveButton
-                              aria-label={t("Remove {name}", { name: member.name })}
-                              {...(member.id === currentUserId ? { className: "hidden" } : {})}
-                              isDisabled={member.id === currentUserId}
-                            />
-                          </Tag>
-                        )}
-                      </TagGroup.List>
-                    </TagGroup>
+                            </Tag>
+                          )}
+                        </TagGroup.List>
+                      </TagGroup>
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </ModalLayout.Body>
               <ModalLayout.Footer>
                 <Button slot="close" type="button" variant="secondary">
                   {t("Cancel")}
                 </Button>
-                <Button type="submit" isDisabled={!name.trim() || !clientId}>
+                <Button type="submit" isDisabled={!name.trim()}>
                   {t(project ? "Save changes" : "Create project")}
                 </Button>
               </ModalLayout.Footer>
