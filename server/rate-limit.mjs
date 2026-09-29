@@ -13,6 +13,7 @@ const READ_OPERATIONS = new Set([
   "getAccountDeletionStatus",
 ]);
 const SENSITIVE_OPERATIONS = new Set([
+  "createWorkspace",
   "inviteMember",
   "createInvitationLink",
   "resendInvitation",

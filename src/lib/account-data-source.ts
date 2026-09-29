@@ -1,4 +1,5 @@
 import type { PersistedAccount, UserPreferences } from "./account-types";
+import type { CurrencyCode } from "./billing";
 import type { TimerState } from "./store";
 import type { Member, Role, TimeEntry } from "./domain";
 
@@ -25,6 +26,13 @@ export type ReportEntriesQuery = {
 };
 
 export type InvitationLink = { member: Member; invitationUrl: string };
+export type CreateWorkspaceInput = {
+  name: string;
+  logoDataUrl?: string | null;
+  hourlyRate: number;
+  currency: CurrencyCode;
+};
+export type CreateWorkspaceResult = { workspaceId: string; account: PersistedAccount };
 
 export type AccountDeletionStatus = {
   accountStatus: "active" | "deletion_pending";
@@ -70,6 +78,7 @@ export interface AccountDataSource {
     userId: string,
     patch: Partial<UserPreferences>,
   ): Promise<DataSourceResult<null>>;
+  createWorkspace(input: CreateWorkspaceInput): Promise<DataSourceResult<CreateWorkspaceResult>>;
   getActiveTimer(userId: string, workspaceId: string): Promise<DataSourceResult<TimerState | null>>;
   saveActiveTimer(userId: string, timer: TimerState): Promise<DataSourceResult<TimerState>>;
   clearActiveTimer(userId: string, workspaceId: string): Promise<DataSourceResult<null>>;

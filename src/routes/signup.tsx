@@ -106,7 +106,7 @@ function SignupPage() {
   return (
     <AuthPage
       title={t("Create your account")}
-      description={t("Start a focused workspace for your team.")}
+      description={t("Create an account to join your company or start a new workspace.")}
     >
       <AuthError message={error} />
       {created ? (

@@ -7,12 +7,11 @@ const common = readFileSync(
   new URL("../../db/migrations/20260828180000_core.sql", import.meta.url),
   "utf8",
 );
-const defaultWorkspace = readFileSync(
-  new URL("../../db/migrations/20260830190000_default_workspace.sql", import.meta.url),
-  "utf8",
-);
-const requiredAccountAccess = readFileSync(
-  new URL("../../db/migrations/20260830200000_required_account_access.sql", import.meta.url),
+const personalWorkspaceRemoval = readFileSync(
+  new URL(
+    "../../db/migrations/20260918120000_remove_personal_workspace_bootstrap.sql",
+    import.meta.url,
+  ),
   "utf8",
 );
 const supabase = readFileSync(
@@ -126,14 +125,17 @@ describe("portable database schema", () => {
     expect(googleOauthProfile).toMatch(/avatar_data_url[\s\S]*heroui-assets/i);
   });
 
-  it("guarantees one personal workspace for profiles without workspace access", () => {
-    expect(defaultWorkspace).toMatch(
-      /create or replace function public\.ensure_personal_workspace\(p_user_id text\)/i,
+  it("stops creating personal workspaces without changing existing workspace data", () => {
+    expect(personalWorkspaceRemoval).toMatch(
+      /drop trigger if exists on_profile_created on public\.profiles/i,
     );
-    expect(defaultWorkspace).toContain("Workspace pessoal");
-    expect(defaultWorkspace).toContain("pg_advisory_xact_lock");
-    expect(defaultWorkspace).toMatch(/create trigger on_profile_created/i);
-    expect(defaultWorkspace).toMatch(/not exists \([\s\S]*workspace_members/i);
-    expect(requiredAccountAccess).toContain("wm.status = 'active'");
+    expect(personalWorkspaceRemoval).toMatch(
+      /drop function if exists public\.handle_new_profile_workspace\(\)/i,
+    );
+    expect(personalWorkspaceRemoval).toMatch(
+      /drop function if exists public\.ensure_personal_workspace\(text\)/i,
+    );
+    expect(personalWorkspaceRemoval).not.toMatch(/delete\s+from\s+public\.workspaces/i);
+    expect(personalWorkspaceRemoval).not.toMatch(/update\s+public\.workspaces/i);
   });
 });

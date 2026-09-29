@@ -9,6 +9,7 @@ import { Typography } from "@heroui/react/typography";
 import type { ReactNode } from "react";
 import { FormAlert } from "@/components/form-feedback";
 import { RouterLink } from "@/components/router-link";
+import { getAuthReturnPath } from "@/lib/auth-redirect";
 import { useI18n } from "@/lib/i18n";
 
 export function AuthPage({
@@ -110,7 +111,10 @@ export function AuthFooter({
 }) {
   return (
     <Typography type="body-sm" color="muted" align="center">
-      {prompt} <RouterLink to={to}>{action}</RouterLink>
+      {prompt}{" "}
+      <RouterLink to={to} search={{ redirect: getAuthReturnPath() }}>
+        {action}
+      </RouterLink>
     </Typography>
   );
 }

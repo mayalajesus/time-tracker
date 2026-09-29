@@ -8,6 +8,34 @@ import {
 } from "../../src/lib/store";
 
 describe("local account persistence", () => {
+  it("accepts an authenticated account with profile preferences and no workspace", () => {
+    const account: PersistedAccount = {
+      version: 13,
+      identities: [
+        {
+          id: "new-user",
+          name: "New User",
+          email: "new.user@example.com",
+          initials: "NU",
+        },
+      ],
+      workspaces: [],
+      preferencesByUserId: {
+        "new-user": {
+          idleDetection: true,
+          language: "en-US",
+          theme: "system",
+          avatarUrl: null,
+          timezone: "UTC",
+          activeWorkspaceId: null,
+          reportFilters: {},
+        },
+      },
+    };
+
+    expect(isValidAccount(account)).toBe(true);
+  });
+
   it("accepts the current snapshot after changing one user's theme", () => {
     const account = makeSeedAccount();
     const preferences = account.preferencesByUserId["u1"];

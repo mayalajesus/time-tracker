@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let mounted = true;
+    let authRevision = 0;
     let unsubscribe: (() => void) | undefined;
     void getAuthClient()
       .then(async (authClient) => {
@@ -30,15 +31,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const { data } = authClient.onAuthStateChange((event, nextSession) => {
+          authRevision += 1;
           if (event === "SIGNED_IN") resetSessionDefaultAvatar();
           if (mounted) setSession(nextSession);
         });
         unsubscribe = () => data.subscription.unsubscribe();
+        const requestedRevision = authRevision;
         const sessionResponse = await authClient.getSession();
-        if (mounted) setSession(sessionResponse.data.session);
+        if (mounted && authRevision === requestedRevision) setSession(sessionResponse.data.session);
       })
       .catch(() => {
-        if (!mounted) return;
+        if (!mounted || authRevision > 0) return;
         setSession(null);
       })
       .finally(() => {

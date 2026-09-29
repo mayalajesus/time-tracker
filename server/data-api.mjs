@@ -409,7 +409,6 @@ async function ensureProfile(client, user, config) {
       [user.id, user.avatarUrl, defaultAvatarUrls],
     );
   }
-  await client.query(`select public.ensure_personal_workspace($1)`, [user.id]);
 }
 
 function emptyTrello() {
@@ -444,14 +443,16 @@ function timeEntryFromRow(row) {
   };
 }
 
-async function loadAccount(client, user, config) {
+export async function loadAccount(client, user, config) {
   await ensureProfile(client, user, config);
   const hasLogoPath = await hasColumn(client, "workspaces", "logo_path");
+  const hasLogoData = await hasColumn(client, "workspaces", "logo_data_url");
   const hasActiveWorkspace = await hasColumn(client, "user_preferences", "active_workspace_id");
   const hasReportFilters = await hasColumn(client, "user_preferences", "report_filters");
   const workspaces = await client.query(
     `select w.id::text, w.name, w.owner_id, w.status, w.created_at, w.archived_at,
-            ${hasLogoPath ? "w.logo_path" : "null::text as logo_path"}
+            ${hasLogoPath ? "w.logo_path" : "null::text as logo_path"},
+            ${hasLogoData ? "w.logo_data_url" : "null::text as logo_data_url"}
        from public.workspaces w
        join public.workspace_members access on access.workspace_id = w.id
       where access.user_id = $1 and access.status = 'active'
@@ -462,8 +463,13 @@ async function loadAccount(client, user, config) {
   const identityRows = await client.query(
     `select distinct p.id, p.name, p.email, p.initials, p.avatar_path
        from public.profiles p
-       join public.workspace_members wm on wm.user_id = p.id
-      where wm.workspace_id = any($1::uuid[]) or p.id = $2`,
+      where p.id = $2
+         or exists (
+           select 1
+             from public.workspace_members wm
+            where wm.user_id = p.id
+              and wm.workspace_id = any($1::uuid[])
+         )`,
     [workspaceIds, user.id],
   );
   const invitations = await client.query(
@@ -664,7 +670,7 @@ async function loadAccount(client, user, config) {
         id: row.id,
         name: row.name,
         ownerId: row.owner_id,
-        logoDataUrl: logoUrlsByWorkspaceId.get(row.id) ?? null,
+        logoDataUrl: row.logo_data_url ?? logoUrlsByWorkspaceId.get(row.id) ?? null,
         status: row.status,
         createdAt: iso(row.created_at),
         ...(row.archived_at ? { archivedAt: iso(row.archived_at) } : {}),
@@ -680,6 +686,77 @@ async function loadAccount(client, user, config) {
     })),
     preferencesByUserId,
   };
+}
+
+export async function createWorkspace(client, user, config, body) {
+  await ensureProfile(client, user, config);
+  const name = requiredText(body.name, "Workspace name", 120).replace(/\s+/g, " ");
+  const billing = membershipBilling({
+    hourlyRate: body.hourlyRate,
+    currency: body.currency,
+  });
+  await client.query(
+    `select pg_advisory_xact_lock(hashtextextended('minvio:workspace-create:' || $1, 0))`,
+    [user.id],
+  );
+  const owned = await client.query(
+    `select count(*)::integer as count
+       from public.workspaces
+      where owner_id = $1`,
+    [user.id],
+  );
+  if (Number(owned.rows[0]?.count ?? 0) >= 5) {
+    throw new DataApiError(409, "You can create up to 5 workspaces.");
+  }
+
+  let logo = null;
+  if (body.logoDataUrl !== undefined && body.logoDataUrl !== null) {
+    logo = parseImageDataUrl(body.logoDataUrl);
+    if (!logo) throw new DataApiError(400, "Choose a valid PNG, JPG or WebP logo.");
+    if (logo.bytes.byteLength > 500_000) {
+      throw new DataApiError(400, "Workspace logos must be smaller than 500 KB.");
+    }
+  }
+
+  const workspaceId = randomUUID();
+  await client.query(
+    `insert into public.workspaces (id, name, owner_id, status)
+     values ($1, $2, $3, 'active')`,
+    [workspaceId, name, user.id],
+  );
+  await client.query(
+    `update public.workspace_members
+        set hourly_rate = $3, currency = $4
+      where workspace_id = $1 and user_id = $2`,
+    [workspaceId, user.id, billing.hourlyRate, billing.currency],
+  );
+
+  if (logo && config.databaseProvider !== "supabase") {
+    await client.query(`update public.workspaces set logo_data_url = $2 where id = $1`, [
+      workspaceId,
+      `data:${logo.contentType};base64,${logo.bytes.toString("base64")}`,
+    ]);
+  } else if (logo) {
+    const logoPath = `${workspaceId}/logo`;
+    const uploaded = await getSupabaseAdmin(config)
+      .storage.from("workspace-logos")
+      .upload(logoPath, logo.bytes, { contentType: logo.contentType, upsert: true });
+    if (uploaded.error) throw new DataApiError(500, "Could not save the workspace logo.");
+    await client.query(`update public.workspaces set logo_path = $2 where id = $1`, [
+      workspaceId,
+      logoPath,
+    ]);
+  }
+
+  if (await hasColumn(client, "user_preferences", "active_workspace_id")) {
+    await client.query(
+      `update public.user_preferences
+          set active_workspace_id = $2, updated_at = now()
+        where user_id = $1`,
+      [user.id, workspaceId],
+    );
+  }
+  return { workspaceId, account: await loadAccount(client, user, config) };
 }
 
 async function loadReportEntries(client, user, body) {
@@ -872,32 +949,43 @@ async function syncAccount(client, user, config, account) {
       } from public.workspaces where id = $1`,
       [workspaceId],
     );
-    let access = existingWorkspace.rows[0]
-      ? await workspaceAccess(client, user.id, workspaceId)
-      : { role: "Owner", membership_status: "active", status: "active", owner_id: user.id };
-    if (existingWorkspace.rows[0]) {
-      if (!access || access.membership_status !== "active") {
-        throw new DataApiError(403, "You do not have permission to update this workspace.");
-      }
-      if (existingWorkspace.rows[0].owner_id !== ownerId) {
-        throw new DataApiError(403, "The workspace owner cannot be changed.");
-      }
-      if (
-        access.role !== "Owner" &&
-        (data.workspace.name !== existingWorkspace.rows[0].name ||
-          data.workspace.status !== existingWorkspace.rows[0].status)
-      ) {
-        throw new DataApiError(403, "Only the workspace Owner can edit it.");
-      }
-    } else if (ownerId !== user.id || access.role !== "Owner") {
-      throw new DataApiError(403, "Only the authenticated user can create a workspace.");
+    if (!existingWorkspace.rows[0]) {
+      throw new DataApiError(409, "Create new workspaces with the createWorkspace operation.");
+    }
+    const access = await workspaceAccess(client, user.id, workspaceId);
+    if (!access || access.membership_status !== "active") {
+      throw new DataApiError(403, "You do not have permission to update this workspace.");
+    }
+    if (existingWorkspace.rows[0].owner_id !== ownerId) {
+      throw new DataApiError(403, "The workspace owner cannot be changed.");
+    }
+    if (
+      access.role !== "Owner" &&
+      (data.workspace.name !== existingWorkspace.rows[0].name ||
+        data.workspace.status !== existingWorkspace.rows[0].status)
+    ) {
+      throw new DataApiError(403, "Only the workspace Owner can edit it.");
     }
     if (existingWorkspace.rows[0] && access.status === "archived" && access.role !== "Owner") {
       continue;
     }
     let logoPath = existingWorkspace.rows[0]?.logo_path ?? null;
-    if (hasLogoPath && access.role === "Owner" && config.databaseProvider === "supabase") {
+    if (access.role === "Owner" && config.databaseProvider !== "supabase") {
       const image = parseImageDataUrl(data.workspace.logoDataUrl);
+      if (image && image.bytes.byteLength > 500_000) {
+        throw new DataApiError(400, "Workspace logos must be smaller than 500 KB.");
+      }
+      if (image || data.workspace.logoDataUrl === null) {
+        await client.query(`update public.workspaces set logo_data_url = $2 where id = $1`, [
+          workspaceId,
+          image ? `data:${image.contentType};base64,${image.bytes.toString("base64")}` : null,
+        ]);
+      }
+    } else if (hasLogoPath && access.role === "Owner" && config.databaseProvider === "supabase") {
+      const image = parseImageDataUrl(data.workspace.logoDataUrl);
+      if (image && image.bytes.byteLength > 500_000) {
+        throw new DataApiError(400, "Workspace logos must be smaller than 500 KB.");
+      }
       if (image) {
         logoPath = `${workspaceId}/logo`;
         const { error } = await getSupabaseAdmin(config)
@@ -962,6 +1050,7 @@ async function syncAccount(client, user, config, account) {
       continue;
     }
     const membershipByUserId = new Map();
+    const protectedMembershipIds = new Set();
     for (const membership of memberships) {
       if (!membership || typeof membership.userId !== "string") {
         throw new DataApiError(400, "Invalid workspace membership payload.");
@@ -1013,12 +1102,19 @@ async function syncAccount(client, user, config, account) {
       if (
         access.role === "Admin" &&
         membership.userId !== user.id &&
-        (membership.role === "Owner" ||
-          (previousMembership?.role === "Owner" && membership.role !== "Owner") ||
-          (previousMembership?.role === "Admin" &&
-            (membership.role !== "Admin" || membership.status !== previousMembership.status)))
+        ((membership.role === "Owner" && previousMembership?.role !== "Owner") ||
+          (["Owner", "Admin"].includes(previousMembership?.role) &&
+            (membership.role !== previousMembership.role ||
+              membership.status !== previousMembership.status)))
       ) {
         throw new DataApiError(403, "Admins cannot manage Owners or Admins.");
+      }
+      if (
+        access.role === "Admin" &&
+        membership.userId !== user.id &&
+        ["Owner", "Admin"].includes(previousMembership?.role)
+      ) {
+        protectedMembershipIds.add(membership.userId);
       }
     }
     const ownerMembership = membershipByUserId.get(ownerId);
@@ -1059,6 +1155,9 @@ async function syncAccount(client, user, config, account) {
       [workspaceId, memberships.map((item) => String(item.userId))],
     );
     for (const membership of memberships) {
+      // Protected members are included in every account snapshot. Validation
+      // above rejects role/status changes; do not rewrite their other fields.
+      if (protectedMembershipIds.has(membership.userId)) continue;
       if (membership.userId === user.id) {
         const billing = membershipBilling(membership);
         await client.query(
@@ -1426,13 +1525,13 @@ async function removeAvatar(client, user, config) {
   throw new DataApiError(500, "Could not remove the profile photo.");
 }
 
-async function acceptInvitation(client, user, config, body) {
+export async function acceptInvitation(client, user, config, body) {
   const invitationId = uuid(body.invitationId);
   await ensureProfile(client, user, config);
   const result = await client.query(
     `select invitation.id::text, invitation.workspace_id::text, invitation.email,
             invitation.role, invitation.status, invitation.invited_at, invitation.expires_at,
-            workspace.status as workspace_status
+            invitation.auth_user_id, workspace.status as workspace_status
        from public.workspace_invitations invitation
        join public.workspaces workspace on workspace.id = invitation.workspace_id
       where invitation.id = $1
@@ -1441,9 +1540,6 @@ async function acceptInvitation(client, user, config, body) {
   );
   const invitation = result.rows[0];
   if (!invitation) throw new DataApiError(404, "This invitation no longer exists.");
-  if (invitation.status !== "pending" || new Date(invitation.expires_at).getTime() <= Date.now()) {
-    throw new DataApiError(409, "This invitation is no longer valid.");
-  }
   if (invitation.workspace_status === "archived") {
     throw new DataApiError(409, "This workspace is archived.");
   }
@@ -1455,6 +1551,24 @@ async function acceptInvitation(client, user, config, body) {
       where workspace_id = $1 and user_id = $2 and status = 'active'`,
     [invitation.workspace_id, user.id],
   );
+  if (
+    invitation.status === "accepted" &&
+    invitation.auth_user_id === user.id &&
+    existing.rowCount
+  ) {
+    if (await hasColumn(client, "user_preferences", "active_workspace_id")) {
+      await client.query(
+        `update public.user_preferences
+            set active_workspace_id = $2, updated_at = now()
+          where user_id = $1`,
+        [user.id, invitation.workspace_id],
+      );
+    }
+    return { workspaceId: invitation.workspace_id };
+  }
+  if (invitation.status !== "pending" || new Date(invitation.expires_at).getTime() <= Date.now()) {
+    throw new DataApiError(409, "This invitation is no longer valid.");
+  }
   if (existing.rowCount) throw new DataApiError(409, "You already have access to this workspace.");
 
   await client.query(
@@ -1582,13 +1696,16 @@ async function operation(request, user, config, body) {
     await ensureProfile(client, user, config);
     const operationName = String(body.operation ?? "");
     const includesUpload =
-      operationName === "syncAccount" &&
-      Array.isArray(body.account?.workspaces) &&
-      body.account.workspaces.some(
-        (item) =>
-          typeof item?.workspace?.logoDataUrl === "string" &&
-          item.workspace.logoDataUrl.startsWith("data:image/"),
-      );
+      (operationName === "syncAccount" &&
+        Array.isArray(body.account?.workspaces) &&
+        body.account.workspaces.some(
+          (item) =>
+            typeof item?.workspace?.logoDataUrl === "string" &&
+            item.workspace.logoDataUrl.startsWith("data:image/"),
+        )) ||
+      (operationName === "createWorkspace" &&
+        typeof body.logoDataUrl === "string" &&
+        body.logoDataUrl.startsWith("data:image/"));
     await enforceUserRateLimits(client, user.id, operationName, new Date(), { includesUpload });
     await enforceAccountLifecycle(client, user.id, operationName);
     if (body.operation === "getAccountDeletionStatus") {
@@ -1637,6 +1754,17 @@ async function operation(request, user, config, body) {
     if (body.operation === "loadReportEntries") return await loadReportEntries(client, user, body);
     if (body.operation === "updatePreferences")
       return await updatePreferences(client, user, config, body);
+    if (body.operation === "createWorkspace") {
+      await client.query("begin");
+      try {
+        const created = await createWorkspace(client, user, config, body);
+        await client.query("commit");
+        return created;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      }
+    }
     if (body.operation === "inviteMember" || body.operation === "createInvitationLink")
       return await inviteMember(client, user, config, body);
     if (body.operation === "resendInvitation")

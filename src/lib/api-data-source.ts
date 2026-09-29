@@ -4,6 +4,7 @@ import type {
   AccountDataSource,
   AccountDeletionStatus,
   AccountExport,
+  CreateWorkspaceResult,
   DataSourceResult,
   InvitationLink,
   ReportEntriesQuery,
@@ -54,9 +55,9 @@ async function request<T>(
   const currentSession = await session();
   if (!currentSession.success) return fail<T>(currentSession.error);
 
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 25_000);
   try {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 25_000);
     const response = await fetch(endpoint, {
       method: "POST",
       credentials: "include",
@@ -67,8 +68,10 @@ async function request<T>(
       },
       body: JSON.stringify({ operation, ...payload }),
     });
-    window.clearTimeout(timeout);
-    const body = (await response.json().catch(() => null)) as {
+    const body = (await response.json().catch((error: unknown) => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    })) as {
       data?: T;
       error?: string;
       code?: string;
@@ -84,7 +87,9 @@ async function request<T>(
     };
     if (!response.ok) return fail(message, metadata);
     if (body?.error) return fail(message, metadata);
-    return ok(body?.data as T);
+    if (!body || !("data" in body))
+      return fail("The server returned an invalid response.", metadata);
+    return ok(body.data as T);
   } catch (error) {
     return fail(
       error instanceof DOMException && error.name === "AbortError"
@@ -93,6 +98,8 @@ async function request<T>(
           ? error.message
           : "The data request failed.",
     );
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -103,6 +110,7 @@ export function createApiDataSource(): AccountDataSource {
       request<TimeEntry[]>("loadReportEntries", { userId, ...query }),
     syncAccount: (_userId, account) => request<null>("syncAccount", { account }),
     updatePreferences: (userId, patch) => request<null>("updatePreferences", { userId, patch }),
+    createWorkspace: (input) => request<CreateWorkspaceResult>("createWorkspace", { ...input }),
     getActiveTimer: (_userId, workspaceId) =>
       request<TimerState | null>("getActiveTimer", { workspaceId }),
     saveActiveTimer: (_userId, timer) => request<TimerState>("saveActiveTimer", { timer }),

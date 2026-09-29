@@ -120,6 +120,7 @@ function WorkspacesPage() {
   const navigate = Route.useNavigate();
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
   const [editWorkspace, setEditWorkspace] = useState<WorkspaceSummary | null>(null);
   const [name, setName] = useState("");
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
@@ -192,24 +193,23 @@ function WorkspacesPage() {
       });
   };
 
-  const submitCreate = () => {
+  const submitCreate = async () => {
     if (parsedHourlyRate === null) {
       setFormError(
         hourlyRateError ?? t("Enter a valid hourly rate with up to two decimal places."),
       );
       return;
     }
-    const result = createWorkspace(name, { hourlyRate: parsedHourlyRate, currency });
+    setCreateBusy(true);
+    const result = await createWorkspace(
+      name,
+      { hourlyRate: parsedHourlyRate, currency },
+      logoDataUrl,
+    );
+    setCreateBusy(false);
     if (!result.success) {
       setFormError(error(result.error));
       return;
-    }
-    if (logoDataUrl && result.id) {
-      const updateResult = updateWorkspace(result.id, { logoDataUrl });
-      if (!updateResult.success) {
-        setFormError(error(updateResult.error));
-        return;
-      }
     }
     toast.success(t("Workspace created"), { description: name.trim() });
     setCreateOpen(false);
@@ -421,11 +421,11 @@ function WorkspacesPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("Workspaces")}
-        description={t("Create focused spaces for your work or open one shared with you.")}
+        description={t("Create company workspaces or open one shared with you.")}
         actions={
           <Button onPress={openCreate}>
             <Plus aria-hidden="true" />
-            {t("New workspace")}
+            {t("New company workspace")}
           </Button>
         }
       />
@@ -454,14 +454,14 @@ function WorkspacesPage() {
         <EmptyBlock
           icon={<Layers className="size-5" />}
           title={t("No workspaces yet")}
-          description={t("Create a workspace to keep your projects, clients and time separate.")}
-          action={<Button onPress={openCreate}>{t("New workspace")}</Button>}
+          description={t("Create a company workspace to keep projects, clients and time together.")}
+          action={<Button onPress={openCreate}>{t("New company workspace")}</Button>}
         />
       )}
 
       <WorkspaceFormModal
         isOpen={createOpen}
-        title={t("New workspace")}
+        title={t("New company workspace")}
         name={name}
         logoDataUrl={logoDataUrl}
         hourlyRate={hourlyRate}
@@ -479,7 +479,8 @@ function WorkspacesPage() {
         onHourlyRateChange={setHourlyRate}
         onCurrencyChange={setCurrency}
         onSubmit={submitCreate}
-        submitLabel={t("Create workspace")}
+        submitLabel={t("Create company workspace")}
+        isPending={createBusy}
         canEditDetails
       />
 
@@ -618,6 +619,7 @@ function WorkspaceFormModal({
   onCurrencyChange,
   onSubmit,
   submitLabel,
+  isPending = false,
   canEditDetails,
   workspaceSettings,
   onWeekStartChange,
@@ -637,8 +639,9 @@ function WorkspaceFormModal({
   onRemoveLogo: () => void;
   onHourlyRateChange: (value: string) => void;
   onCurrencyChange: (value: CurrencyCode) => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
   submitLabel: string;
+  isPending?: boolean;
   canEditDetails: boolean;
   workspaceSettings?: {
     weekStart: "monday" | "sunday";
@@ -781,7 +784,10 @@ function WorkspaceFormModal({
                 </Button>
                 <Button
                   type="submit"
-                  isDisabled={(canEditDetails && !name.trim()) || Boolean(hourlyRateError)}
+                  isPending={isPending}
+                  isDisabled={
+                    isPending || (canEditDetails && !name.trim()) || Boolean(hourlyRateError)
+                  }
                 >
                   {submitLabel}
                 </Button>

@@ -333,6 +333,7 @@ function membersToMemberships(
   return members.map((member) => {
     const billing = billingByUserId[member.id] ?? existingByUserId.get(member.id);
     return {
+      ...existingByUserId.get(member.id),
       workspaceId,
       userId: member.id,
       role: member.role,
@@ -695,10 +696,6 @@ export function pauseTimerAt(timer: TimerState, effectiveAt = Date.now()): Timer
   };
 }
 
-function cloneTrello(trello: TrelloState): TrelloState {
-  return { ...trello, lists: [...trello.lists], cards: [...trello.cards] };
-}
-
 function initialsFromName(name: string): string {
   const initials = name
     .split(/\s+/)
@@ -782,7 +779,11 @@ interface StoreValue {
   updateCurrentMemberName: (name: string) => StoreResult;
   updateCurrentMemberEmail: (email: string) => StoreResult;
   switchWorkspace: (workspaceId: string) => StoreResult;
-  createWorkspace: (name: string, billing: BillingPreference) => StoreResult;
+  createWorkspace: (
+    name: string,
+    billing: BillingPreference,
+    logoDataUrl?: string | null,
+  ) => Promise<StoreResult>;
   setWorkspaceBilling: (workspaceId: string, billing: BillingPreference) => StoreResult;
   updateWorkspace: (
     workspaceId: string,
@@ -850,6 +851,7 @@ function shareAccountReferences(
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { loading: authLoading, session } = useAuth();
+  const authenticatedUserId = session?.user.id ?? "";
   const queryClient = useQueryClient();
   const dataSource = useMemo(() => createApiDataSource(), []);
   const [account, setAccount] = useState<PersistedAccount>({
@@ -858,19 +860,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     workspaces: [],
     preferencesByUserId: {},
   });
-  const [activeMemberId, setActiveMemberId] = useState(() => session?.user.id ?? "");
+  const [activeMemberId, setActiveMemberId] = useState(() => authenticatedUserId);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("signed-out");
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [timerPersistenceError, setTimerPersistenceError] = useState<string | null>(null);
   const [accountReloadKey, setAccountReloadKey] = useState(0);
+  const accountScope = useMemo(
+    () => ({ userId: authenticatedUserId, reloadKey: accountReloadKey }),
+    [authenticatedUserId, accountReloadKey],
+  );
+  const accountScopeRef = useRef(accountScope);
+  accountScopeRef.current = accountScope;
   const [hydrated, setHydrated] = useState(false);
   const [timerHydrated, setTimerHydrated] = useState(false);
   const accountRef = useRef(account);
   accountRef.current = account;
-  const skipAccountSyncRef = useRef(false);
-  const accountRefreshInFlightRef = useRef(false);
+  const syncedAccountRef = useRef<PersistedAccount | null>(null);
+  const accountRefreshPromiseRef = useRef<Promise<boolean> | null>(null);
   const accountSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const timerSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const persistedTimerRef = useRef<{
+    scope: typeof accountScope;
+    workspaceId: string;
+    value: string;
+  } | null>(null);
+  const workspaceCreationRef = useRef<{
+    scope: typeof accountScope;
+    promise: Promise<StoreResult>;
+  } | null>(null);
   const activeData =
     account.workspaces.find((data) => data.workspace.id === activeWorkspaceId) ??
     account.workspaces[0];
@@ -946,6 +965,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [today, setToday] = useState(() => getLocalToday(new Date(), preferences.timezone));
   const currentMember = members.find((member) => member.id === activeMemberId) ?? null;
   const timerRef = useRef(timer);
+  const timerRevisionRef = useRef(0);
   timerRef.current = timer;
   const recentTasks = useMemo(() => {
     const entriesForMember = entries.filter((entry) => entry.userId === activeMemberId);
@@ -955,22 +975,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeMemberId, activeWorkspaceId, entries, timer]);
   const retryAccountLoad = useCallback(() => setAccountReloadKey((value) => value + 1), []);
 
-  const refreshAccount = useCallback(async () => {
-    if (authLoading || !session || !hydrated || accountRefreshInFlightRef.current) return;
-    accountRefreshInFlightRef.current = true;
-    try {
-      const result = await dataSource.loadAccount(session.user.id);
-      if (!result.success) return;
+  const persistAccount = useCallback((): Promise<boolean> => {
+    const previousSync = accountSyncPromiseRef.current ?? Promise.resolve();
+    const request = previousSync
+      .catch(() => undefined)
+      .then(async () => {
+        if (!authenticatedUserId || accountScopeRef.current !== accountScope) return false;
+        const snapshot = accountForSyncRef.current;
+        if (JSON.stringify(snapshot) === JSON.stringify(syncedAccountRef.current)) return true;
+        const result = await dataSource.syncAccount(authenticatedUserId, snapshot);
+        if (accountScopeRef.current !== accountScope) return false;
+        if (!result.success) {
+          setAccountError(result.error);
+          return false;
+        }
+        syncedAccountRef.current = snapshot;
+        setAccountError(null);
+        return true;
+      });
+    const trackedSync: Promise<void> = request
+      .then(() => undefined)
+      .finally(() => {
+        if (accountSyncPromiseRef.current === trackedSync) accountSyncPromiseRef.current = null;
+      });
+    accountSyncPromiseRef.current = trackedSync;
+    return request;
+  }, [accountScope, authenticatedUserId, dataSource]);
+
+  const refreshAccount = useCallback(async (): Promise<boolean> => {
+    if (authLoading || !authenticatedUserId || !hydrated) return false;
+    const scope = accountScope;
+    if (accountScopeRef.current !== scope) return false;
+    // Polls must not replace edits waiting for the debounce or an active save.
+    if (
+      accountSyncPromiseRef.current ||
+      JSON.stringify(accountForSyncRef.current) !== JSON.stringify(syncedAccountRef.current)
+    )
+      return false;
+    if (accountRefreshPromiseRef.current) {
+      const previousResult = await accountRefreshPromiseRef.current;
+      if (accountScopeRef.current !== scope) return false;
+      return previousResult;
+    }
+    const request = (async () => {
+      if (accountScopeRef.current !== scope) return false;
+      const snapshot = accountForSyncRef.current;
+      const result = await dataSource.loadAccount(authenticatedUserId);
+      if (accountScopeRef.current !== scope || accountForSyncRef.current !== snapshot) return false;
+      if (!result.success) {
+        setAccountError(result.error);
+        return false;
+      }
 
       const loadedAccount = shareAccountReferences(accountRef.current, result.data);
       const preferredWorkspaceId =
-        loadedAccount.preferencesByUserId[session.user.id]?.activeWorkspaceId;
+        loadedAccount.preferencesByUserId[authenticatedUserId]?.activeWorkspaceId;
       const currentWorkspace = loadedAccount.workspaces.find(
         (data) =>
           data.workspace.id === activeWorkspaceId &&
           data.workspace.status === "active" &&
           data.memberships.some(
-            (membership) => membership.userId === session.user.id && membership.status === "active",
+            (membership) =>
+              membership.userId === authenticatedUserId && membership.status === "active",
           ),
       );
       const nextWorkspace =
@@ -981,7 +1047,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             data.workspace.status === "active" &&
             data.memberships.some(
               (membership) =>
-                membership.userId === session.user.id && membership.status === "active",
+                membership.userId === authenticatedUserId && membership.status === "active",
             ),
         ) ??
         loadedAccount.workspaces.find(
@@ -989,12 +1055,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             data.workspace.status === "active" &&
             data.memberships.some(
               (membership) =>
-                membership.userId === session.user.id && membership.status === "active",
+                membership.userId === authenticatedUserId && membership.status === "active",
             ),
         );
       if (!nextWorkspace) {
-        setAccountError("Your account must have an active workspace.");
-        return;
+        syncedAccountRef.current = loadedAccount;
+        setAccount(loadedAccount);
+        setActiveWorkspaceId("");
+        setEntries([]);
+        setProjects([]);
+        setClients([]);
+        setMembers([]);
+        setSettingsState(initialSettings);
+        setTrelloState(initialTrello);
+        setTimer(initialTimer);
+        setTimerHydrated(false);
+        setAccountError(null);
+        return true;
       }
 
       const mappedMembers = nextWorkspace.memberships
@@ -1002,7 +1079,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .filter((member): member is Member => member !== null);
       const nextMembers = reuseIfEqual(membersRef.current, mappedMembers);
       const workspaceChanged = nextWorkspace.workspace.id !== activeWorkspaceId;
-      skipAccountSyncRef.current = true;
+      syncedAccountRef.current = loadedAccount;
       setAccount(loadedAccount);
       setActiveWorkspaceId(nextWorkspace.workspace.id);
       setEntries(nextWorkspace.entries);
@@ -1016,15 +1093,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTimerHydrated(false);
       }
       setAccountError(null);
+      return true;
+    })();
+    accountRefreshPromiseRef.current = request;
+    try {
+      return await request;
     } finally {
-      accountRefreshInFlightRef.current = false;
+      if (accountRefreshPromiseRef.current === request) accountRefreshPromiseRef.current = null;
     }
-  }, [activeWorkspaceId, authLoading, dataSource, hydrated, session]);
+  }, [accountScope, activeWorkspaceId, authLoading, dataSource, hydrated, authenticatedUserId]);
 
   useEffect(() => {
     let cancelled = false;
     if (authLoading) return;
-    if (!session) {
+    if (!authenticatedUserId) {
+      syncedAccountRef.current = null;
+      setTimerPersistenceError(null);
       setAccountLoading(false);
       setAccountError(null);
       setHydrated(false);
@@ -1046,8 +1130,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAccountError(null);
     setHydrated(false);
     setTimerHydrated(false);
-    setActiveMemberId(session.user.id);
-    void dataSource.loadAccount(session.user.id).then((result) => {
+    setActiveMemberId(authenticatedUserId);
+    void dataSource.loadAccount(authenticatedUserId).then((result) => {
       if (cancelled) return;
       if (!result.success) {
         setAccountLoading(false);
@@ -1056,26 +1140,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const loadedAccount = result.data;
       const preferredWorkspaceId =
-        loadedAccount.preferencesByUserId[session.user.id]?.activeWorkspaceId;
+        loadedAccount.preferencesByUserId[authenticatedUserId]?.activeWorkspaceId;
       const canUseWorkspace = (data: WorkspaceData) =>
         data.workspace.status === "active" &&
         data.memberships.some(
-          (membership) => membership.userId === session.user.id && membership.status === "active",
+          (membership) =>
+            membership.userId === authenticatedUserId && membership.status === "active",
         );
       const nextWorkspace =
         loadedAccount.workspaces.find(
           (data) => data.workspace.id === preferredWorkspaceId && canUseWorkspace(data),
         ) ?? loadedAccount.workspaces.find(canUseWorkspace);
       if (!nextWorkspace) {
+        syncedAccountRef.current = loadedAccount;
+        setAccount(loadedAccount);
+        setActiveWorkspaceId("");
+        setEntries([]);
+        setProjects([]);
+        setClients([]);
+        setMembers([]);
+        setSettingsState(initialSettings);
+        setTrelloState(initialTrello);
+        setTimer(initialTimer);
+        setTimerHydrated(false);
+        setHydrated(true);
         setAccountLoading(false);
-        setAccountError("Your account must have an active workspace.");
+        setAccountError(null);
         return;
       }
       const nextMembers =
         nextWorkspace?.memberships
           .map((membership) => membershipToMember(membership, loadedAccount.identities))
           .filter((member): member is Member => member !== null) ?? [];
-      skipAccountSyncRef.current = true;
+      syncedAccountRef.current = loadedAccount;
       setAccount(loadedAccount);
       setActiveWorkspaceId(nextWorkspace?.workspace.id ?? "");
       setEntries(nextWorkspace?.entries ?? []);
@@ -1092,10 +1189,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accountReloadKey, authLoading, dataSource, session]);
+  }, [accountReloadKey, authLoading, dataSource, authenticatedUserId]);
 
   useEffect(() => {
-    if (!hydrated || !session) return;
+    if (!hydrated || !authenticatedUserId) return;
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void refreshAccount();
     };
@@ -1107,7 +1204,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [hydrated, refreshAccount, session]);
+  }, [hydrated, refreshAccount, authenticatedUserId]);
 
   useEffect(() => {
     if (!hydrated || !activeWorkspaceId) return;
@@ -1139,34 +1236,92 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeWorkspaceId, entries, hydrated, queryClient]);
 
   useEffect(() => {
-    if (!hydrated || !session || !activeWorkspaceId) return;
+    if (!hydrated || !authenticatedUserId || !activeWorkspaceId) return;
     let cancelled = false;
     setTimerHydrated(false);
-    void dataSource.getActiveTimer(session.user.id, activeWorkspaceId).then((result) => {
-      if (cancelled) return;
+    setTimerPersistenceError(null);
+    const timerRevision = timerRevisionRef.current;
+    void (async () => {
+      // Finish earlier writes before reading the timer for this workspace.
+      if (timerSyncPromiseRef.current) await timerSyncPromiseRef.current;
+      if (cancelled || accountScopeRef.current !== accountScope) return;
+      const result = await dataSource.getActiveTimer(authenticatedUserId, activeWorkspaceId);
+      if (cancelled || accountScopeRef.current !== accountScope) return;
+      if (!result.success) {
+        setTimerPersistenceError(result.error);
+        return;
+      }
+      const hydratedTimer = result.data ?? initialTimer;
+      persistedTimerRef.current = {
+        scope: accountScope,
+        workspaceId: activeWorkspaceId,
+        value: JSON.stringify(hydratedTimer),
+      };
       // Do not let a slow hydration response overwrite a timer the user started
       // while the request was in flight. Once hydrated, the persistence effect
       // below saves that newer local timer normally.
-      if (timerRef.current.status === "idle") {
-        const hydratedTimer = result.success && result.data ? result.data : initialTimer;
+      if (timerRevisionRef.current === timerRevision) {
         timerRef.current = hydratedTimer;
         setTimer(hydratedTimer);
       }
       setTimerHydrated(true);
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [activeMemberId, activeWorkspaceId, dataSource, hydrated, session]);
+  }, [accountScope, activeMemberId, activeWorkspaceId, dataSource, hydrated, authenticatedUserId]);
 
   useEffect(() => {
-    if (!hydrated || !timerHydrated || !session || !activeWorkspaceId) return;
-    if (timer.status === "idle") {
-      void dataSource.clearActiveTimer(session.user.id, activeWorkspaceId);
-    } else {
-      void dataSource.saveActiveTimer(session.user.id, timer);
-    }
-  }, [activeMemberId, activeWorkspaceId, dataSource, hydrated, session, timer, timerHydrated]);
+    if (!hydrated || !timerHydrated || !authenticatedUserId || !activeWorkspaceId) return;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && accountScopeRef.current === accountScope;
+    const previous = timerSyncPromiseRef.current ?? Promise.resolve();
+    const request = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (!isCurrent()) return;
+        const value = JSON.stringify(timer);
+        if (
+          persistedTimerRef.current?.scope === accountScope &&
+          persistedTimerRef.current.workspaceId === activeWorkspaceId &&
+          persistedTimerRef.current.value === value
+        )
+          return;
+        // Save project/entry changes before the timer references them or is cleared.
+        if (!(await persistAccount()) || !isCurrent()) return;
+        const result =
+          timer.status === "idle"
+            ? await dataSource.clearActiveTimer(authenticatedUserId, activeWorkspaceId)
+            : await dataSource.saveActiveTimer(authenticatedUserId, timer);
+        if (accountScopeRef.current !== accountScope) return;
+        if (!result.success) {
+          persistedTimerRef.current = null;
+          if (isCurrent()) setTimerPersistenceError(result.error);
+          return;
+        }
+        // Even an obsolete in-flight save changed the server. The next queued
+        // operation must see that result (especially a stop following a start).
+        persistedTimerRef.current = { scope: accountScope, workspaceId: activeWorkspaceId, value };
+        if (isCurrent()) setTimerPersistenceError(null);
+      });
+    const tracked = request.finally(() => {
+      if (timerSyncPromiseRef.current === tracked) timerSyncPromiseRef.current = null;
+    });
+    timerSyncPromiseRef.current = tracked;
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeMemberId,
+    activeWorkspaceId,
+    dataSource,
+    hydrated,
+    authenticatedUserId,
+    timer,
+    timerHydrated,
+    accountScope,
+    persistAccount,
+  ]);
 
   useEffect(() => {
     const current = account.workspaces.find((data) => data.workspace.id === activeWorkspaceId);
@@ -1185,7 +1340,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       current.projects === projects &&
       current.clients === clients &&
       current.settings === settings &&
-      current.trello === trello
+      current.trello === trello &&
+      JSON.stringify(current.memberships) === JSON.stringify(next.memberships)
     )
       return;
     setAccount((previous) => ({
@@ -1206,30 +1362,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (!hydrated || !session) return;
-    if (skipAccountSyncRef.current) {
-      skipAccountSyncRef.current = false;
-      return;
-    }
+    if (!hydrated || !authenticatedUserId) return;
+    // Hydration and refreshes are reads, not local edits. Compare against the
+    // actual server snapshot instead of skipping the next arbitrary render.
+    if (JSON.stringify(accountForSync) === JSON.stringify(syncedAccountRef.current)) return;
     const id = window.setTimeout(() => {
-      const previousSync = accountSyncPromiseRef.current ?? Promise.resolve();
-      const nextSync = previousSync
-        .catch(() => undefined)
-        .then(() => dataSource.syncAccount(session.user.id, accountForSyncRef.current))
-        .then((result) => {
-          if (!result.success) {
-            setAccountError(result.error);
-            return;
-          }
-          setAccountError(null);
-        });
-      const trackedSync: Promise<void> = nextSync.finally(() => {
-        if (accountSyncPromiseRef.current === trackedSync) accountSyncPromiseRef.current = null;
-      });
-      accountSyncPromiseRef.current = trackedSync;
+      void persistAccount();
     }, 200);
     return () => window.clearTimeout(id);
-  }, [accountForSync, dataSource, hydrated, session]);
+  }, [accountForSync, hydrated, authenticatedUserId, persistAccount]);
 
   useEffect(() => {
     const refreshToday = () => setToday(getLocalToday(new Date(), preferences.timezone));
@@ -1346,6 +1487,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projectId: string | null,
       billable?: boolean,
     ): StoreResult => {
+      if (workspaceCreationRef.current?.scope === accountScope)
+        return { success: false, error: "Wait for workspace creation to finish." };
       if (!can("track-own-time"))
         return { success: false, error: "Your account cannot track time." };
       if (timerRef.current.status !== "idle")
@@ -1368,6 +1511,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           currency: workspaceBilling.currency,
         },
       );
+      timerRevisionRef.current += 1;
+
       timerRef.current = next;
       setElapsed(0);
       setTimer(next);
@@ -1409,6 +1554,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...patch,
         ...(patch.task !== undefined ? { task: patch.task.trim() } : {}),
       };
+      if (
+        next.task === current.task &&
+        next.projectId === current.projectId &&
+        next.billable === current.billable
+      )
+        return { success: true };
+      timerRevisionRef.current += 1;
+
       timerRef.current = next;
       setTimer(next);
       return { success: true };
@@ -1429,6 +1582,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         accumulated: nextElapsed,
         startedAt: current.status === "running" ? Date.now() : null,
       };
+      timerRevisionRef.current += 1;
+
       timerRef.current = next;
       setElapsed(nextElapsed);
       setTimer(next);
@@ -1439,6 +1594,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = timerRef.current;
       if (current.status !== "running") return;
       const next = pauseTimerAt(current, effectiveAt);
+      timerRevisionRef.current += 1;
+
       timerRef.current = next;
       setElapsed(next.accumulated);
       setTimer(next);
@@ -1448,6 +1605,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = timerRef.current;
       if (current.status !== "paused" || current.workspaceId !== activeWorkspaceId) return;
       const next = { ...current, status: "running" as const, startedAt: Date.now() };
+      timerRevisionRef.current += 1;
+
       timerRef.current = next;
       setTimer(next);
     };
@@ -1497,6 +1656,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...list,
         ]);
       }
+      timerRevisionRef.current += 1;
+
       timerRef.current = initialTimer;
       setTimer(initialTimer);
       setElapsed(0);
@@ -2016,6 +2177,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     const switchWorkspace = (workspaceId: string): StoreResult => {
+      if (workspaceCreationRef.current?.scope === accountScope)
+        return { success: false, error: "Wait for workspace creation to finish." };
       if (workspaceId === activeWorkspaceId) return { success: true };
       const target = account.workspaces.find((data) => data.workspace.id === workspaceId);
       if (!target) return { success: false, error: "This workspace could not be found." };
@@ -2068,15 +2231,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSettingsState(target.settings);
       setTrelloState(target.trello);
       const nextTimer = initialTimer;
+      timerRevisionRef.current += 1;
+
       timerRef.current = nextTimer;
       setTimer(nextTimer);
       setElapsed(elapsedForTimer(nextTimer));
       return { success: true };
     };
 
-    const createWorkspace = (name: string, billing: BillingPreference): StoreResult => {
-      if (sessionStatus !== "active" || !currentMember || currentMember.status !== "active")
+    const createWorkspace = async (
+      name: string,
+      billing: BillingPreference,
+      logoDataUrl?: string | null,
+    ): Promise<StoreResult> => {
+      if (sessionStatus !== "active" || !authenticatedUserId)
         return { success: false, error: "Choose an active account." };
+      if (workspaceCreationRef.current?.scope === accountScope)
+        return workspaceCreationRef.current.promise;
       if (timerRef.current.status !== "idle")
         return {
           success: false,
@@ -2094,84 +2265,83 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!isCurrencyCode(billing.currency)) {
         return { success: false, error: "Choose a valid currency." };
       }
+      if (logoDataUrl !== undefined && !isValidLogoUrl(logoDataUrl)) {
+        return { success: false, error: "Choose a PNG, JPG or WebP logo smaller than 500 KB." };
+      }
       if (
         account.workspaces.some(
           (data) => data.workspace.name.toLowerCase() === trimmedName.toLowerCase(),
         )
       )
         return { success: false, error: "A workspace with this name already exists." };
-      const id = nextId(
-        "w",
-        account.workspaces.map((data) => data.workspace.id),
-      );
-      const workspace: WorkspaceData = {
-        workspace: {
-          id,
+      // Creation shares the account write queue. Older snapshots must finish
+      // before the server selects the new workspace; later saves use its ID.
+      const request = persistAccount().then(async (saved): Promise<StoreResult> => {
+        if (!saved || accountScopeRef.current !== accountScope)
+          return { success: false, error: "Could not save your pending changes." };
+        const result = await dataSource.createWorkspace({
           name: trimmedName,
-          ownerId: activeMemberId,
-          logoDataUrl: null,
-          status: "active",
-          createdAt: new Date().toISOString(),
-        },
-        memberships: [
-          {
-            workspaceId: id,
-            userId: activeMemberId,
-            role: "Owner",
-            status: "active",
-            hourlyRate: billing.hourlyRate,
-            currency: billing.currency,
-            joinedAt: new Date().toISOString(),
+          hourlyRate: billing.hourlyRate,
+          currency: billing.currency,
+          ...(logoDataUrl !== undefined ? { logoDataUrl } : {}),
+        });
+        if (accountScopeRef.current !== accountScope)
+          return { success: false, error: "Choose an active account." };
+        if (!result.success) return { success: false, error: result.error };
+        const created = result.data.account.workspaces.find(
+          (data) => data.workspace.id === result.data.workspaceId,
+        );
+        if (!created) return { success: false, error: "This workspace could not be found." };
+        const mergeCreated = (snapshot: PersistedAccount): PersistedAccount => ({
+          ...snapshot,
+          workspaces: [
+            ...snapshot.workspaces.filter((data) => data.workspace.id !== created.workspace.id),
+            created,
+          ],
+          preferencesByUserId: {
+            ...snapshot.preferencesByUserId,
+            [authenticatedUserId]: {
+              ...(snapshot.preferencesByUserId[authenticatedUserId] ?? initialPreferences),
+              activeWorkspaceId: created.workspace.id,
+            },
           },
-        ],
-        entries: [],
-        projects: [],
-        clients: [],
-        settings: { ...initialSettings },
-        trello: cloneTrello(initialTrello),
-      };
-      const current = account.workspaces.find((data) => data.workspace.id === activeWorkspaceId);
-      setAccount((previous) => ({
-        ...previous,
-        workspaces: [
-          ...previous.workspaces.map((data) =>
-            data.workspace.id === activeWorkspaceId && current
-              ? {
-                  ...current,
-                  entries,
-                  projects,
-                  clients,
-                  memberships: membersToMemberships(
-                    activeWorkspaceId,
-                    members,
-                    current.memberships,
-                  ),
-                  settings,
-                  trello,
-                }
-              : data,
-          ),
-          workspace,
-        ],
-      }));
-      setActiveWorkspaceId(id);
-      setAccount((currentAccount) => ({
-        ...currentAccount,
-        preferencesByUserId: {
-          ...currentAccount.preferencesByUserId,
-          [activeMemberId]: {
-            ...(currentAccount.preferencesByUserId[activeMemberId] ?? initialPreferences),
-            activeWorkspaceId: id,
-          },
-        },
-      }));
-      setEntries([]);
-      setProjects([]);
-      setClients([]);
-      setMembers([{ ...currentMember, role: "Owner", status: "active" }]);
-      setSettingsState({ ...initialSettings });
-      setTrelloState(cloneTrello(initialTrello));
-      return { success: true, id };
+        });
+        // Keep edits made in the previous workspace while the request was pending.
+        const next = mergeCreated(accountForSyncRef.current);
+        syncedAccountRef.current = mergeCreated(
+          syncedAccountRef.current ?? accountForSyncRef.current,
+        );
+        accountForSyncRef.current = next;
+        accountRef.current = next;
+        setAccount(next);
+        setActiveWorkspaceId(created.workspace.id);
+        setEntries(created.entries);
+        setProjects(created.projects);
+        setClients(created.clients);
+        setMembers(
+          created.memberships
+            .map((membership) => membershipToMember(membership, next.identities))
+            .filter((member): member is Member => member !== null),
+        );
+        setSettingsState(created.settings);
+        setTrelloState(created.trello);
+        timerRevisionRef.current += 1;
+        timerRef.current = initialTimer;
+        setTimer(initialTimer);
+        setTimerHydrated(false);
+        setAccountError(null);
+        return { success: true, id: created.workspace.id };
+      });
+      const tracked = request
+        .then(() => undefined)
+        .finally(() => {
+          if (accountSyncPromiseRef.current === tracked) accountSyncPromiseRef.current = null;
+          if (workspaceCreationRef.current?.promise === request)
+            workspaceCreationRef.current = null;
+        });
+      accountSyncPromiseRef.current = tracked;
+      workspaceCreationRef.current = { scope: accountScope, promise: request };
+      return request;
     };
 
     const updateWorkspace = (
@@ -2321,6 +2491,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSettingsState(nextWorkspace.settings);
         setTrelloState(nextWorkspace.trello);
         const nextTimer = initialTimer;
+        timerRevisionRef.current += 1;
+
         timerRef.current = nextTimer;
         setTimer(nextTimer);
         setElapsed(elapsedForTimer(nextTimer));
@@ -2416,6 +2588,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSettingsState(nextWorkspace.settings);
       setTrelloState(nextWorkspace.trello);
       const nextTimer = initialTimer;
+      timerRevisionRef.current += 1;
+
       timerRef.current = nextTimer;
       setTimer(nextTimer);
       setElapsed(elapsedForTimer(nextTimer));
@@ -2430,6 +2604,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (timerRef.current.status !== "idle")
         return { success: false, error: "Stop the active timer before changing accounts." };
       const nextTimer = initialTimer;
+      timerRevisionRef.current += 1;
+
       timerRef.current = nextTimer;
       setTimer(nextTimer);
       setElapsed(elapsedForTimer(nextTimer));
@@ -2455,6 +2631,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Stop the active timer before changing accounts." };
       resetSessionDefaultAvatar();
       const nextTimer = initialTimer;
+      timerRevisionRef.current += 1;
+
       timerRef.current = nextTimer;
       setTimer(nextTimer);
       setElapsed(elapsedForTimer(nextTimer));
@@ -2501,7 +2679,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeWorkspaceId,
       sessionStatus,
       accountLoading,
-      accountError,
+      accountError: accountError ?? timerPersistenceError,
       retryAccountLoad,
       can,
       canTrackProject,
@@ -2552,6 +2730,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     account,
     accountError,
     accountLoading,
+    accountScope,
     activeMemberId,
     activeWorkspaceId,
     clients,
@@ -2566,10 +2745,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     billingPreferencesByUserId,
     projects,
     recentTasks,
+    persistAccount,
     retryAccountLoad,
+    authenticatedUserId,
     sessionStatus,
     settings,
     timer,
+    timerPersistenceError,
     today,
     trello,
   ]);

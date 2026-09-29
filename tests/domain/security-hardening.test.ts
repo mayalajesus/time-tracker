@@ -52,6 +52,11 @@ describe("production security hardening", () => {
     );
   });
 
+  it("routes workspace creation through the dedicated rate-limited operation", () => {
+    expect(dataApi).toContain("Create new workspaces with the createWorkspace operation.");
+    expect(dataApi).toContain("minvio:workspace-create:");
+  });
+
   it("synchronizes only the authenticated user's entries", async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1 });
     await syncEntries({ query }, userId, workspaceId, [

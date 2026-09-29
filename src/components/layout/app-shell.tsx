@@ -24,12 +24,14 @@ import { IdleDetectionPrompt } from "@/components/idle-detection-prompt";
 import { LogTimeModal } from "@/components/log-time-modal";
 import { ProfileMenu } from "@/components/profile-menu";
 import { FormAlert } from "@/components/form-feedback";
+import { WorkspaceOnboarding } from "@/components/workspace-onboarding";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { SidebarNavigation } from "@/components/layout/sidebar-navigation";
 import { DrawerTriggerRegistration } from "@/components/overlay-trigger-registration";
 import { AppI18nProvider, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth-context";
+import { getAuthReturnPath } from "@/lib/auth-redirect";
 import { useAccountLifecycle } from "@/lib/account-lifecycle-context";
 
 const publicAuthPaths = new Set([
@@ -42,6 +44,7 @@ const publicAuthPaths = new Set([
   "/privacy",
 ]);
 const accountFlowPaths = new Set(["/legal-consent", "/account-deletion"]);
+const legalDocumentPaths = new Set(["/terms", "/privacy"]);
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { preferences } = useStore();
@@ -85,12 +88,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     if (!lifecycle.status.legal.accepted) {
-      if (currentLocation.pathname !== "/legal-consent") {
-        void navigate({ to: "/legal-consent", replace: true });
+      if (
+        currentLocation.pathname !== "/legal-consent" &&
+        !legalDocumentPaths.has(currentLocation.pathname)
+      ) {
+        const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.replace(`/legal-consent?redirect=${encodeURIComponent(returnPath)}`);
       }
       return;
     }
-    if (isAccountFlowPath) void navigate({ to: "/tracker", replace: true });
+    if (isAccountFlowPath) window.location.replace(getAuthReturnPath());
   }, [
     authLoading,
     configured,
@@ -155,7 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function AppDataGate({ children }: { children: ReactNode }) {
-  const { sessionStatus, accountLoading, accountError, retryAccountLoad } = useStore();
+  const { sessionStatus, accountLoading, accountError, retryAccountLoad, workspaces } = useStore();
   const { t, error } = useI18n();
 
   if (accountLoading) {
@@ -187,11 +194,9 @@ function AppDataGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return sessionStatus === "signed-out" ? (
-    <SignedOutScreen />
-  ) : (
-    <AppShellContent>{children}</AppShellContent>
-  );
+  if (sessionStatus === "signed-out") return <SignedOutScreen />;
+  if (workspaces.length === 0) return <WorkspaceOnboarding />;
+  return <AppShellContent>{children}</AppShellContent>;
 }
 
 function AppShellContent({ children }: { children: ReactNode }) {

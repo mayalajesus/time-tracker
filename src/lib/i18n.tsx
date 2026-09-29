@@ -554,6 +554,10 @@ const ptBR: Record<string, string> = {
     "Escolha uma configuração válida de faturamento padrão.",
   "Choose a valid week start.": "Escolha um início de semana válido.",
   "Choose an active account.": "Escolha uma conta ativa.",
+  "Wait for workspace creation to finish.": "Aguarde a conclusão da criação do workspace.",
+  "Could not save your pending changes.": "Não foi possível salvar suas alterações pendentes.",
+  "Your account session changed. Try again.": "A sessão da sua conta mudou. Tente novamente.",
+  "The server returned an invalid response.": "O servidor retornou uma resposta inválida.",
   "Choose an active account in this workspace.": "Escolha uma conta ativa neste workspace.",
   "Stop the active timer before changing accounts.":
     "Pare o cronômetro ativo antes de trocar de conta.",
@@ -946,11 +950,15 @@ const ptBR: Record<string, string> = {
   Current: "Atual",
   Open: "Abrir",
   "New workspace": "Novo workspace",
+  "New company workspace": "Novo workspace de empresa",
   "Edit workspace": "Editar workspace",
   Archive: "Arquivar",
   Restore: "Restaurar",
   Leave: "Sair",
   "Create workspace": "Criar workspace",
+  "Create company workspace": "Criar workspace da empresa",
+  "Create your company workspace": "Crie o workspace da sua empresa",
+  "Company workspace name": "Nome do workspace da empresa",
   "Save changes": "Salvar alterações",
   Workspace: "Workspace",
   "Workspace logo": "Logo do workspace",
@@ -975,6 +983,10 @@ const ptBR: Record<string, string> = {
   "Workspace action unavailable": "Não conseguimos concluir essa ação no workspace",
   "Create a workspace to keep your projects, clients and time separate.":
     "Crie um workspace para manter seus projetos, clientes e horas separados.",
+  "Create a company workspace to keep projects, clients and time together.":
+    "Crie um workspace de empresa para reunir projetos, clientes e horas.",
+  "Create company workspaces or open one shared with you.":
+    "Crie workspaces de empresa ou abra um compartilhado com você.",
   "Archived workspaces are read-only. Restore it first.":
     "Workspaces arquivados são somente leitura. Restaure-o primeiro.",
   "This workspace is already archived.": "Este workspace já está arquivado.",
@@ -1027,6 +1039,8 @@ const ptBR: Record<string, string> = {
   "Create account": "Criar conta",
   "Access your time tracking workspace.": "Acesse seu workspace do rastreador de tempo.",
   "Start a focused workspace for your team.": "Comece um workspace focado para sua equipe.",
+  "Create an account to join your company or start a new workspace.":
+    "Crie uma conta para entrar na sua empresa ou iniciar um novo workspace.",
   "Authentication failed": "Não conseguimos entrar na sua conta",
   "Forgot password?": "Esqueceu a senha?",
   "Signing in…": "Entrando…",
@@ -1067,9 +1081,12 @@ const ptBR: Record<string, string> = {
   "Open workspace": "Abrir workspace",
   "Accept invitation": "Aceitar convite",
   "Accepting invitation…": "Aceitando convite…",
+  "Preparing your invitation…": "Preparando seu convite…",
   "Could not accept invitation": "Não conseguimos aceitar este convite",
   "Your invitation has been accepted.": "Seu convite foi aceito.",
   "This invitation link is missing or invalid.": "Este link de convite está ausente ou é inválido.",
+  "If your company invited you, open the original invitation link. Otherwise, create a company workspace to get started.":
+    "Se sua empresa convidou você, abra o link de convite original. Caso contrário, crie um workspace da empresa para começar.",
   "This invitation is no longer valid.": "Este convite não é mais válido.",
   "This workspace is archived.": "Este workspace está arquivado.",
   "This invitation belongs to a different email address.":
@@ -1120,6 +1137,15 @@ const ptBR: Record<string, string> = {
   "We couldn't remove this member": "Não conseguimos remover este membro.",
   "We couldn't accept this invitation": "Não conseguimos aceitar este convite.",
   "We couldn't save this workspace": "Não conseguimos salvar este workspace.",
+  "You can create up to 5 workspaces.": "Você pode criar até 5 workspaces.",
+  "A workspace name is required.": "O nome do workspace é obrigatório.",
+  "Choose a valid hourly rate.": "Escolha um valor por hora válido.",
+  "Choose a valid currency.": "Escolha uma moeda válida.",
+  "Choose a PNG, JPG or WebP logo smaller than 500 KB.":
+    "Escolha um logo PNG, JPG ou WebP menor que 500 KB.",
+  "Workspace logos must be smaller than 500 KB.": "O logo do workspace deve ter menos de 500 KB.",
+  "The workspace was created, but your account could not be refreshed.":
+    "O workspace foi criado, mas não foi possível atualizar sua conta.",
   "We couldn't sign you in": "Não conseguimos entrar na sua conta.",
   "We couldn't update the timer": "Não conseguimos atualizar o cronômetro.",
   "We couldn't add this manual entry": "Não conseguimos adicionar este registro manual.",

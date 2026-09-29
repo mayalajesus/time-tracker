@@ -26,6 +26,16 @@ database URL, service-role key or access token with `VITE_`.
 
 ## Production release
 
+The explicit workspace creation release includes
+`20260918120000_remove_personal_workspace_bootstrap.sql` and
+`20260929120000_workspace_logo_data.sql`. The latter stores validated workspace
+logos in PostgreSQL for Neon; Supabase continues using Storage. Both migrations
+must accompany the API and frontend release. Coordinate the cutover: the old API
+calls `ensure_personal_workspace`, which the first migration removes, and the
+new Neon logo writes require the second migration. Do not serve the old API
+against the schema after removing that function. Workspace creation now returns
+the committed account snapshot consumed by the new frontend.
+
 1. Install and verify the exact locked dependencies with `npm ci`.
 2. Run `npm run check`.
 3. Preview the production migration plan:

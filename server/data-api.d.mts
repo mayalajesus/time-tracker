@@ -1,5 +1,8 @@
 export interface QueryClient {
-  query: (...args: unknown[]) => Promise<{
+  query: (
+    sql: string,
+    parameters?: unknown[],
+  ) => Promise<{
     rowCount?: number | null;
     rows?: Array<Record<string, unknown>>;
   }>;
@@ -18,6 +21,28 @@ export function syncEntries(
   workspaceId: string,
   entries: Array<Record<string, unknown>>,
 ): Promise<void>;
+export function createWorkspace(
+  client: QueryClient,
+  user: { id: string; email: string; name?: string; avatarUrl?: string },
+  config: Record<string, unknown>,
+  body: Record<string, unknown>,
+): Promise<{ workspaceId: string; account: Awaited<ReturnType<typeof loadAccount>> }>;
+export function loadAccount(
+  client: QueryClient,
+  user: { id: string; email: string; name?: string; avatarUrl?: string },
+  config: Record<string, unknown>,
+): Promise<{
+  version: number;
+  identities: Array<{ id: string; name: string; email: string; initials: string }>;
+  workspaces: Array<Record<string, unknown>>;
+  preferencesByUserId: Record<string, Record<string, unknown>>;
+}>;
+export function acceptInvitation(
+  client: QueryClient,
+  user: { id: string; email: string; name?: string; avatarUrl?: string },
+  config: Record<string, unknown>,
+  body: Record<string, unknown>,
+): Promise<{ workspaceId: string }>;
 export function readBody(request: unknown): Promise<Record<string, unknown>>;
 export function handleDataRequest(
   request: unknown,

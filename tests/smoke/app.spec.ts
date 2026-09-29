@@ -95,6 +95,46 @@ test("account loading failures expose a recoverable error state", async ({ page 
   await expect(page.locator("#main-content")).toBeVisible({ timeout: 15_000 });
 });
 
+test("accounts without a workspace see the company workspace onboarding", async ({ page }) => {
+  const credentials = qaCredentials("owner");
+  await page.route("**/api/data", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    const body = request.postDataJSON() as { operation?: string };
+    if (body.operation !== "loadAccount") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: { version: 13, identities: [], workspaces: [], preferencesByUserId: {} },
+      }),
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Email", { exact: true }).fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/tracker(?:\?.*)?$/);
+  await expect(
+    page.getByRole("heading", {
+      name: /Create your company workspace|Crie o workspace da sua empresa/,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel(/Company workspace name|Nome do workspace da empresa/),
+  ).toBeVisible();
+  await expect(page.locator("#main-content")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Sign out|Sair/ })).toBeVisible();
+});
+
 test("members cannot access owner and admin actions", async ({ page }) => {
   await signInAs(page, "member");
   await page.goto("/projects");

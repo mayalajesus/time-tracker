@@ -70,11 +70,13 @@ export async function signUpWithPassword(
   const authClient = await requireClient();
   if (!authClient) return unavailable();
   const name = `${firstName.trim()} ${lastName.trim()}`.replace(/\s+/g, " ");
+  const redirect = new URL(getAuthRedirect());
+  redirect.searchParams.set("redirect", getAuthReturnPath());
   const response = await authClient.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: getAuthRedirect(),
+      emailRedirectTo: redirect.toString(),
       data: { name, displayName: name, firstName: firstName.trim(), lastName: lastName.trim() },
       ...(captchaToken ? { captchaToken } : {}),
     },

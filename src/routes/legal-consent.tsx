@@ -4,17 +4,17 @@ import { Card } from "@heroui/react/card";
 import { Checkbox } from "@heroui/react/checkbox";
 import { Label } from "@heroui/react/label";
 import { Typography } from "@heroui/react/typography";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { FormAlert } from "@/components/form-feedback";
 import { RouterLink } from "@/components/router-link";
 import { useAccountLifecycle } from "@/lib/account-lifecycle-context";
+import { getAuthReturnPath } from "@/lib/auth-redirect";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/legal-consent")({ component: LegalConsentPage });
 
 function LegalConsentPage() {
-  const navigate = useNavigate();
   const { locale } = useI18n();
   const { acceptLegalTerms, status } = useAccountLifecycle();
   const [accepted, setAccepted] = useState(false);
@@ -30,7 +30,7 @@ function LegalConsentPage() {
       setError(result.error);
       return;
     }
-    void navigate({ to: "/tracker", replace: true });
+    window.location.replace(getAuthReturnPath());
   };
 
   return (

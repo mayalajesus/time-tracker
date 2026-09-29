@@ -43,6 +43,10 @@ describe("public beta protection", () => {
       scope: "sensitive",
       limit: 10,
     });
+    expect(rateLimitScopes("createWorkspace")[1]).toMatchObject({
+      scope: "sensitive",
+      limit: 10,
+    });
     expect(rateLimitScopes("syncAccount", { includesUpload: true })).toEqual([
       { scope: "general", limit: 180, windowMs: 60_000 },
       { scope: "sync", limit: 30, windowMs: 60_000 },

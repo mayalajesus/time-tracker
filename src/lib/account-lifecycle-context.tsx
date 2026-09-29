@@ -1,4 +1,13 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createApiDataSource } from "./api-data-source";
 import type { AccountDeletionStatus } from "./account-data-source";
 import { useAuth } from "./auth-context";
@@ -19,65 +28,82 @@ const AccountLifecycleContext = createContext<AccountLifecycleValue | null>(null
 
 export function AccountLifecycleProvider({ children }: { children: ReactNode }) {
   const { loading: authLoading, session } = useAuth();
+  const userId = session?.user.id ?? "";
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const requestRevision = useRef(0);
+  const [loadedUserId, setLoadedUserId] = useState("");
   const dataSource = useMemo(() => createApiDataSource(), []);
   const [status, setStatus] = useState<AccountDeletionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async () => {
-    if (!session) {
+  const refresh = useCallback(async () => {
+    const revision = ++requestRevision.current;
+    if (!userId) {
       setStatus(null);
+      setError(null);
+      setLoading(false);
+      setLoadedUserId("");
       return;
     }
     setLoading(true);
     const result = await dataSource.getAccountDeletionStatus();
+    if (userIdRef.current !== userId || revision !== requestRevision.current) return;
+    setLoadedUserId(userId);
     setLoading(false);
     if (!result.success) {
+      setStatus(null);
       setError(result.error);
       return;
     }
     setStatus(result.data);
     setError(null);
-  };
+  }, [dataSource, userId]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!session) {
-      setStatus(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
     void refresh();
-    // A new authenticated subject must always receive a fresh lifecycle state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, session?.user.id]);
+    return () => {
+      requestRevision.current += 1;
+    };
+  }, [authLoading, refresh]);
 
   const value = useMemo<AccountLifecycleValue>(
     () => ({
       // Fail closed during the render between Auth resolving and the lifecycle
       // request effect starting, so protected content never flashes briefly.
-      loading: authLoading || Boolean(session && !status && !error) || loading,
-      error,
-      status,
+      loading:
+        authLoading ||
+        Boolean(userId && (loadedUserId !== userId || (!status && !error))) ||
+        loading,
+      error: loadedUserId === userId ? error : null,
+      status: loadedUserId === userId ? status : null,
       refresh,
       acceptLegalTerms: async (locale) => {
+        const revision = ++requestRevision.current;
         const result = await dataSource.acceptLegalTerms(locale);
+        if (userIdRef.current !== userId || revision !== requestRevision.current)
+          return { success: false, error: "Your account session changed. Try again." };
+        setLoading(false);
         if (!result.success) return result;
+        setLoadedUserId(userId);
         setStatus(result.data);
         setError(null);
         return { success: true };
       },
       cancelDeletion: async () => {
+        const revision = ++requestRevision.current;
         const result = await dataSource.cancelAccountDeletion();
+        if (userIdRef.current !== userId || revision !== requestRevision.current)
+          return { success: false, error: "Your account session changed. Try again." };
+        setLoading(false);
         if (!result.success) return result;
         await refresh();
         return { success: true };
       },
     }),
-    // `refresh` intentionally follows the current authenticated session captured by this render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [authLoading, dataSource, error, loading, status, session],
+    [authLoading, dataSource, error, loadedUserId, loading, refresh, status, userId],
   );
 
   return (
