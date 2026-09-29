@@ -333,6 +333,7 @@ function membersToMemberships(
   return members.map((member) => {
     const billing = billingByUserId[member.id] ?? existingByUserId.get(member.id);
     return {
+      ...existingByUserId.get(member.id),
       workspaceId,
       userId: member.id,
       role: member.role,
@@ -850,6 +851,7 @@ function shareAccountReferences(
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { loading: authLoading, session } = useAuth();
+  const authenticatedUserId = session?.user.id ?? "";
   const queryClient = useQueryClient();
   const dataSource = useMemo(() => createApiDataSource(), []);
   const [account, setAccount] = useState<PersistedAccount>({
@@ -858,17 +860,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     workspaces: [],
     preferencesByUserId: {},
   });
-  const [activeMemberId, setActiveMemberId] = useState(() => session?.user.id ?? "");
+  const [activeMemberId, setActiveMemberId] = useState(() => authenticatedUserId);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("signed-out");
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountReloadKey, setAccountReloadKey] = useState(0);
+  const accountScope = useMemo(
+    () => ({ userId: authenticatedUserId, reloadKey: accountReloadKey }),
+    [authenticatedUserId, accountReloadKey],
+  );
+  const accountScopeRef = useRef(accountScope);
+  accountScopeRef.current = accountScope;
   const [hydrated, setHydrated] = useState(false);
   const [timerHydrated, setTimerHydrated] = useState(false);
   const accountRef = useRef(account);
   accountRef.current = account;
-  const skipAccountSyncRef = useRef(false);
+  const syncedAccountRef = useRef<PersistedAccount | null>(null);
   const accountRefreshInFlightRef = useRef(false);
   const accountSyncPromiseRef = useRef<Promise<void> | null>(null);
   const activeData =
@@ -955,22 +963,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeMemberId, activeWorkspaceId, entries, timer]);
   const retryAccountLoad = useCallback(() => setAccountReloadKey((value) => value + 1), []);
 
+  const persistAccount = useCallback((): Promise<boolean> => {
+    const previousSync = accountSyncPromiseRef.current ?? Promise.resolve();
+    const request = previousSync
+      .catch(() => undefined)
+      .then(async () => {
+        if (!authenticatedUserId || accountScopeRef.current !== accountScope) return false;
+        const snapshot = accountForSyncRef.current;
+        if (JSON.stringify(snapshot) === JSON.stringify(syncedAccountRef.current)) return true;
+        const result = await dataSource.syncAccount(authenticatedUserId, snapshot);
+        if (accountScopeRef.current !== accountScope) return false;
+        if (!result.success) {
+          setAccountError(result.error);
+          return false;
+        }
+        syncedAccountRef.current = snapshot;
+        setAccountError(null);
+        return true;
+      });
+    const trackedSync: Promise<void> = request
+      .then(() => undefined)
+      .finally(() => {
+        if (accountSyncPromiseRef.current === trackedSync) accountSyncPromiseRef.current = null;
+      });
+    accountSyncPromiseRef.current = trackedSync;
+    return request;
+  }, [accountScope, authenticatedUserId, dataSource]);
+
   const refreshAccount = useCallback(async () => {
-    if (authLoading || !session || !hydrated || accountRefreshInFlightRef.current) return;
+    if (authLoading || !authenticatedUserId || !hydrated || accountRefreshInFlightRef.current)
+      return;
+    const scope = accountScope;
+    if (
+      accountScopeRef.current !== scope ||
+      accountSyncPromiseRef.current ||
+      JSON.stringify(accountForSyncRef.current) !== JSON.stringify(syncedAccountRef.current)
+    )
+      return;
+    const snapshot = accountForSyncRef.current;
     accountRefreshInFlightRef.current = true;
     try {
-      const result = await dataSource.loadAccount(session.user.id);
+      const result = await dataSource.loadAccount(authenticatedUserId);
+      if (accountScopeRef.current !== scope || accountForSyncRef.current !== snapshot) return;
       if (!result.success) return;
 
       const loadedAccount = shareAccountReferences(accountRef.current, result.data);
       const preferredWorkspaceId =
-        loadedAccount.preferencesByUserId[session.user.id]?.activeWorkspaceId;
+        loadedAccount.preferencesByUserId[authenticatedUserId]?.activeWorkspaceId;
       const currentWorkspace = loadedAccount.workspaces.find(
         (data) =>
           data.workspace.id === activeWorkspaceId &&
           data.workspace.status === "active" &&
           data.memberships.some(
-            (membership) => membership.userId === session.user.id && membership.status === "active",
+            (membership) =>
+              membership.userId === authenticatedUserId && membership.status === "active",
           ),
       );
       const nextWorkspace =
@@ -981,7 +1027,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             data.workspace.status === "active" &&
             data.memberships.some(
               (membership) =>
-                membership.userId === session.user.id && membership.status === "active",
+                membership.userId === authenticatedUserId && membership.status === "active",
             ),
         ) ??
         loadedAccount.workspaces.find(
@@ -989,7 +1035,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             data.workspace.status === "active" &&
             data.memberships.some(
               (membership) =>
-                membership.userId === session.user.id && membership.status === "active",
+                membership.userId === authenticatedUserId && membership.status === "active",
             ),
         );
       if (!nextWorkspace) {
@@ -1002,7 +1048,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .filter((member): member is Member => member !== null);
       const nextMembers = reuseIfEqual(membersRef.current, mappedMembers);
       const workspaceChanged = nextWorkspace.workspace.id !== activeWorkspaceId;
-      skipAccountSyncRef.current = true;
+      syncedAccountRef.current = loadedAccount;
       setAccount(loadedAccount);
       setActiveWorkspaceId(nextWorkspace.workspace.id);
       setEntries(nextWorkspace.entries);
@@ -1019,12 +1065,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       accountRefreshInFlightRef.current = false;
     }
-  }, [activeWorkspaceId, authLoading, dataSource, hydrated, session]);
+  }, [accountScope, activeWorkspaceId, authLoading, dataSource, hydrated, authenticatedUserId]);
 
   useEffect(() => {
     let cancelled = false;
     if (authLoading) return;
-    if (!session) {
+    if (!authenticatedUserId) {
+      syncedAccountRef.current = null;
       setAccountLoading(false);
       setAccountError(null);
       setHydrated(false);
@@ -1046,8 +1093,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAccountError(null);
     setHydrated(false);
     setTimerHydrated(false);
-    setActiveMemberId(session.user.id);
-    void dataSource.loadAccount(session.user.id).then((result) => {
+    setActiveMemberId(authenticatedUserId);
+    void dataSource.loadAccount(authenticatedUserId).then((result) => {
       if (cancelled) return;
       if (!result.success) {
         setAccountLoading(false);
@@ -1056,11 +1103,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const loadedAccount = result.data;
       const preferredWorkspaceId =
-        loadedAccount.preferencesByUserId[session.user.id]?.activeWorkspaceId;
+        loadedAccount.preferencesByUserId[authenticatedUserId]?.activeWorkspaceId;
       const canUseWorkspace = (data: WorkspaceData) =>
         data.workspace.status === "active" &&
         data.memberships.some(
-          (membership) => membership.userId === session.user.id && membership.status === "active",
+          (membership) =>
+            membership.userId === authenticatedUserId && membership.status === "active",
         );
       const nextWorkspace =
         loadedAccount.workspaces.find(
@@ -1075,7 +1123,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         nextWorkspace?.memberships
           .map((membership) => membershipToMember(membership, loadedAccount.identities))
           .filter((member): member is Member => member !== null) ?? [];
-      skipAccountSyncRef.current = true;
+      syncedAccountRef.current = loadedAccount;
       setAccount(loadedAccount);
       setActiveWorkspaceId(nextWorkspace?.workspace.id ?? "");
       setEntries(nextWorkspace?.entries ?? []);
@@ -1092,10 +1140,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accountReloadKey, authLoading, dataSource, session]);
+  }, [accountReloadKey, authLoading, dataSource, authenticatedUserId]);
 
   useEffect(() => {
-    if (!hydrated || !session) return;
+    if (!hydrated || !authenticatedUserId) return;
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void refreshAccount();
     };
@@ -1107,7 +1155,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", refreshWhenVisible);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [hydrated, refreshAccount, session]);
+  }, [hydrated, refreshAccount, authenticatedUserId]);
 
   useEffect(() => {
     if (!hydrated || !activeWorkspaceId) return;
@@ -1139,10 +1187,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeWorkspaceId, entries, hydrated, queryClient]);
 
   useEffect(() => {
-    if (!hydrated || !session || !activeWorkspaceId) return;
+    if (!hydrated || !authenticatedUserId || !activeWorkspaceId) return;
     let cancelled = false;
     setTimerHydrated(false);
-    void dataSource.getActiveTimer(session.user.id, activeWorkspaceId).then((result) => {
+    void dataSource.getActiveTimer(authenticatedUserId, activeWorkspaceId).then((result) => {
       if (cancelled) return;
       // Do not let a slow hydration response overwrite a timer the user started
       // while the request was in flight. Once hydrated, the persistence effect
@@ -1157,16 +1205,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeMemberId, activeWorkspaceId, dataSource, hydrated, session]);
+  }, [activeMemberId, activeWorkspaceId, dataSource, hydrated, authenticatedUserId]);
 
   useEffect(() => {
-    if (!hydrated || !timerHydrated || !session || !activeWorkspaceId) return;
+    if (!hydrated || !timerHydrated || !authenticatedUserId || !activeWorkspaceId) return;
     if (timer.status === "idle") {
-      void dataSource.clearActiveTimer(session.user.id, activeWorkspaceId);
+      void dataSource.clearActiveTimer(authenticatedUserId, activeWorkspaceId);
     } else {
-      void dataSource.saveActiveTimer(session.user.id, timer);
+      void dataSource.saveActiveTimer(authenticatedUserId, timer);
     }
-  }, [activeMemberId, activeWorkspaceId, dataSource, hydrated, session, timer, timerHydrated]);
+  }, [
+    activeMemberId,
+    activeWorkspaceId,
+    dataSource,
+    hydrated,
+    authenticatedUserId,
+    timer,
+    timerHydrated,
+  ]);
 
   useEffect(() => {
     const current = account.workspaces.find((data) => data.workspace.id === activeWorkspaceId);
@@ -1185,7 +1241,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       current.projects === projects &&
       current.clients === clients &&
       current.settings === settings &&
-      current.trello === trello
+      current.trello === trello &&
+      JSON.stringify(current.memberships) === JSON.stringify(next.memberships)
     )
       return;
     setAccount((previous) => ({
@@ -1206,30 +1263,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (!hydrated || !session) return;
-    if (skipAccountSyncRef.current) {
-      skipAccountSyncRef.current = false;
-      return;
-    }
+    if (!hydrated || !authenticatedUserId) return;
+    // Hydration and refreshes are reads, not local edits. Compare against the
+    // actual server snapshot instead of skipping the next arbitrary render.
+    if (JSON.stringify(accountForSync) === JSON.stringify(syncedAccountRef.current)) return;
     const id = window.setTimeout(() => {
-      const previousSync = accountSyncPromiseRef.current ?? Promise.resolve();
-      const nextSync = previousSync
-        .catch(() => undefined)
-        .then(() => dataSource.syncAccount(session.user.id, accountForSyncRef.current))
-        .then((result) => {
-          if (!result.success) {
-            setAccountError(result.error);
-            return;
-          }
-          setAccountError(null);
-        });
-      const trackedSync: Promise<void> = nextSync.finally(() => {
-        if (accountSyncPromiseRef.current === trackedSync) accountSyncPromiseRef.current = null;
-      });
-      accountSyncPromiseRef.current = trackedSync;
+      void persistAccount();
     }, 200);
     return () => window.clearTimeout(id);
-  }, [accountForSync, dataSource, hydrated, session]);
+  }, [accountForSync, hydrated, authenticatedUserId, persistAccount]);
 
   useEffect(() => {
     const refreshToday = () => setToday(getLocalToday(new Date(), preferences.timezone));
@@ -1409,6 +1451,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...patch,
         ...(patch.task !== undefined ? { task: patch.task.trim() } : {}),
       };
+      if (
+        next.task === current.task &&
+        next.projectId === current.projectId &&
+        next.billable === current.billable
+      )
+        return { success: true };
       timerRef.current = next;
       setTimer(next);
       return { success: true };

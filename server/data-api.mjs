@@ -962,6 +962,7 @@ async function syncAccount(client, user, config, account) {
       continue;
     }
     const membershipByUserId = new Map();
+    const protectedMembershipIds = new Set();
     for (const membership of memberships) {
       if (!membership || typeof membership.userId !== "string") {
         throw new DataApiError(400, "Invalid workspace membership payload.");
@@ -1013,12 +1014,19 @@ async function syncAccount(client, user, config, account) {
       if (
         access.role === "Admin" &&
         membership.userId !== user.id &&
-        (membership.role === "Owner" ||
-          (previousMembership?.role === "Owner" && membership.role !== "Owner") ||
-          (previousMembership?.role === "Admin" &&
-            (membership.role !== "Admin" || membership.status !== previousMembership.status)))
+        ((membership.role === "Owner" && previousMembership?.role !== "Owner") ||
+          (["Owner", "Admin"].includes(previousMembership?.role) &&
+            (membership.role !== previousMembership.role ||
+              membership.status !== previousMembership.status)))
       ) {
         throw new DataApiError(403, "Admins cannot manage Owners or Admins.");
+      }
+      if (
+        access.role === "Admin" &&
+        membership.userId !== user.id &&
+        ["Owner", "Admin"].includes(previousMembership?.role)
+      ) {
+        protectedMembershipIds.add(membership.userId);
       }
     }
     const ownerMembership = membershipByUserId.get(ownerId);
@@ -1059,6 +1067,8 @@ async function syncAccount(client, user, config, account) {
       [workspaceId, memberships.map((item) => String(item.userId))],
     );
     for (const membership of memberships) {
+      // Protected members are included in every snapshot without being edited.
+      if (protectedMembershipIds.has(membership.userId)) continue;
       if (membership.userId === user.id) {
         const billing = membershipBilling(membership);
         await client.query(
