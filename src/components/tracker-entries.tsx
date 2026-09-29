@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Button } from "@heroui/react/button";
 import { FieldError } from "@heroui/react/field-error";
 import { Input } from "@heroui/react/input";
@@ -640,16 +641,18 @@ function TrackerGroupSummaryRow({
           className="flex min-h-20 items-center justify-end px-2 py-3"
         >
           <div className={trackerActionLayoutClass} data-tracker-action>
-            <Button
-              isIconOnly
-              aria-label={t("Start {task} again", { task: group.task })}
-              isDisabled={timer.status !== "idle"}
-              className={trackerActionButtonClass}
-              variant={isHovered || isExpanded ? "tertiary" : "ghost"}
-              onPress={startAgain}
-            >
-              <Play className="size-4" />
-            </Button>
+            <IconTooltip>
+              <Button
+                isIconOnly
+                aria-label={t("Start {task} again", { task: group.task })}
+                isDisabled={timer.status !== "idle"}
+                className={trackerActionButtonClass}
+                variant={isHovered || isExpanded ? "tertiary" : "ghost"}
+                onPress={startAgain}
+              >
+                <Play className="size-4" />
+              </Button>
+            </IconTooltip>
             <ActionDropdown
               ariaLabel={t("Actions for {task} group", { task: group.task })}
               items={[
@@ -1093,16 +1096,18 @@ function TrackerEntryRow({
   const actionCell = (
     <Table.Cell className={trackerActionCellClass}>
       <div className={trackerActionLayoutClass} data-tracker-action>
-        <Button
-          isIconOnly
-          aria-label={t("Start {task} again", { task: entry.task })}
-          isDisabled={timer.status !== "idle"}
-          className={trackerActionButtonClass}
-          variant={isHovered || Boolean(activeField) ? "tertiary" : "ghost"}
-          onPress={startAgain}
-        >
-          <Play className="size-4" />
-        </Button>
+        <IconTooltip>
+          <Button
+            isIconOnly
+            aria-label={t("Start {task} again", { task: entry.task })}
+            isDisabled={timer.status !== "idle"}
+            className={trackerActionButtonClass}
+            variant={isHovered || Boolean(activeField) ? "tertiary" : "ghost"}
+            onPress={startAgain}
+          >
+            <Play className="size-4" />
+          </Button>
+        </IconTooltip>
         <ActionDropdown
           ariaLabel={t("Actions for {task}", { task: entry.task })}
           items={[
@@ -1261,23 +1266,25 @@ function TrackerEntryRow({
                 </Button>
               </div>
             )}
-            <Button
-              isIconOnly
-              size="sm"
-              variant="ghost"
-              aria-label={t("Billable: {value}", {
-                value: entry.billable ? t("yes") : t("no"),
-              })}
-              aria-pressed={entry.billable}
-              data-tracker-field="billable"
-              className="size-4 min-w-4 p-0"
-              onPress={() => {
-                const next = !entry.billable;
-                if (commitField("billable", next)) onDeactivate();
-              }}
-            >
-              <BillableIndicator billable={entry.billable} mode="icon" />
-            </Button>
+            <IconTooltip>
+              <Button
+                isIconOnly
+                size="sm"
+                variant="ghost"
+                aria-label={t("Billable: {value}", {
+                  value: entry.billable ? t("yes") : t("no"),
+                })}
+                aria-pressed={entry.billable}
+                data-tracker-field="billable"
+                className="size-4 min-w-4 p-0"
+                onPress={() => {
+                  const next = !entry.billable;
+                  if (commitField("billable", next)) onDeactivate();
+                }}
+              >
+                <BillableIndicator billable={entry.billable} mode="icon" />
+              </Button>
+            </IconTooltip>
           </div>
           {activeField === "description" ? (
             <div className="flex min-w-0 items-start gap-1">
@@ -1311,17 +1318,19 @@ function TrackerEntryRow({
               />
             </div>
           ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              fullWidth
-              aria-label={t(entry.description ? "Edit description" : "Add description")}
-              className={`${descriptionButtonClass} h-5 min-h-5 justify-start`}
-              data-tracker-field="description"
-              onPress={() => onActivate("description")}
-            >
-              {entry.description || "·"}
-            </Button>
+            <IconTooltip>
+              <Button
+                size="sm"
+                variant="ghost"
+                fullWidth
+                aria-label={t(entry.description ? "Edit description" : "Add description")}
+                className={`${descriptionButtonClass} h-5 min-h-5 justify-start`}
+                data-tracker-field="description"
+                onPress={() => onActivate("description")}
+              >
+                {entry.description || "·"}
+              </Button>
+            </IconTooltip>
           )}
         </div>
       </Table.Cell>

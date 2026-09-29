@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Button } from "@heroui/react/button";
 import { Typography } from "@heroui/react/typography";
 import { createFileRoute } from "@tanstack/react-router";
@@ -86,17 +87,19 @@ function TrackerPage() {
       <section className="space-y-4" aria-label={t("Tracking period")}>
         <div className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-1">
-            <Button
-              isIconOnly
-              aria-label={t("Previous {unit}", {
-                unit: t(navigationUnit === "range" ? "range" : navigationUnit),
-              })}
-              size="sm"
-              variant="tertiary"
-              onPress={() => setPeriod(shiftTrackerPeriod(period, -1, weekStartsOn))}
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
+            <IconTooltip>
+              <Button
+                isIconOnly
+                aria-label={t("Previous {unit}", {
+                  unit: t(navigationUnit === "range" ? "range" : navigationUnit),
+                })}
+                size="sm"
+                variant="tertiary"
+                onPress={() => setPeriod(shiftTrackerPeriod(period, -1, weekStartsOn))}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+            </IconTooltip>
             <div className="min-w-0 px-1">
               <TrackerPeriodFilter
                 period={period}
@@ -105,17 +108,19 @@ function TrackerPage() {
                 onChange={setPeriod}
               />
             </div>
-            <Button
-              isIconOnly
-              aria-label={t("Next {unit}", {
-                unit: t(navigationUnit === "range" ? "range" : navigationUnit),
-              })}
-              size="sm"
-              variant="tertiary"
-              onPress={() => setPeriod(shiftTrackerPeriod(period, 1, weekStartsOn))}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
+            <IconTooltip>
+              <Button
+                isIconOnly
+                aria-label={t("Next {unit}", {
+                  unit: t(navigationUnit === "range" ? "range" : navigationUnit),
+                })}
+                size="sm"
+                variant="tertiary"
+                onPress={() => setPeriod(shiftTrackerPeriod(period, 1, weekStartsOn))}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </IconTooltip>
             {!isCurrentWeek && (
               <Button
                 size="sm"

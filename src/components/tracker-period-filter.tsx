@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Calendar, ChevronLeft, ChevronRight } from "@gravity-ui/icons";
 import { Button } from "@heroui/react/button";
 import { I18nProvider } from "@heroui/react/rac";
@@ -127,21 +128,25 @@ export function TrackerPeriodFilter({
               className="w-full max-w-full p-3"
             >
               <RangeCalendar.Header className="relative flex items-center justify-center gap-2">
-                <RangeCalendar.NavButton
-                  slot="previous"
-                  aria-label={t("Previous month")}
-                  className="absolute start-0"
-                >
-                  <ChevronLeft className="size-4" />
-                </RangeCalendar.NavButton>
+                <IconTooltip>
+                  <RangeCalendar.NavButton
+                    slot="previous"
+                    aria-label={t("Previous month")}
+                    className="absolute start-0"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </RangeCalendar.NavButton>
+                </IconTooltip>
                 <RangeCalendar.Heading className="w-full text-center" />
-                <RangeCalendar.NavButton
-                  slot="next"
-                  aria-label={t("Next month")}
-                  className="absolute end-0"
-                >
-                  <ChevronRight className="size-4" />
-                </RangeCalendar.NavButton>
+                <IconTooltip>
+                  <RangeCalendar.NavButton
+                    slot="next"
+                    aria-label={t("Next month")}
+                    className="absolute end-0"
+                  >
+                    <ChevronRight className="size-4" />
+                  </RangeCalendar.NavButton>
+                </IconTooltip>
               </RangeCalendar.Header>
               <RangeCalendar.Grid className="mt-2 w-full max-w-full">
                 <RangeCalendar.GridHeader>

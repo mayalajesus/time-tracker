@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Card } from "@heroui/react/card";
 import { ComboBox } from "@heroui/react/combo-box";
 import { EmptyState } from "@heroui/react/empty-state";
@@ -252,32 +253,34 @@ export function TrackerBar() {
                 className="shrink-0 gap-0.5"
                 selectionMode="multiple"
               >
-                <ToggleButton
-                  aria-label={t("Stop")}
-                  className="size-9 min-h-9 min-w-9"
-                  isIconOnly
-                  isSelected={false}
-                  onPress={() => {
-                    const result = stopTimer();
-                    if (!result.success) {
-                      setTimerError(result.error);
-                      return;
-                    }
-                    if (result.warning) {
-                      toast.info(t("Overlapping time"), {
-                        description: result.conflict
-                          ? formatOverlapConflict(result.conflict, locale)
-                          : error(result.warning),
-                      });
-                    }
-                    setTask("");
-                    setTimerError(null);
-                    setActiveTask("");
-                    setProjectId(null);
-                  }}
-                >
-                  <Square aria-hidden="true" />
-                </ToggleButton>
+                <IconTooltip>
+                  <ToggleButton
+                    aria-label={t("Stop")}
+                    className="size-9 min-h-9 min-w-9"
+                    isIconOnly
+                    isSelected={false}
+                    onPress={() => {
+                      const result = stopTimer();
+                      if (!result.success) {
+                        setTimerError(result.error);
+                        return;
+                      }
+                      if (result.warning) {
+                        toast.info(t("Overlapping time"), {
+                          description: result.conflict
+                            ? formatOverlapConflict(result.conflict, locale)
+                            : error(result.warning),
+                        });
+                      }
+                      setTask("");
+                      setTimerError(null);
+                      setActiveTask("");
+                      setProjectId(null);
+                    }}
+                  >
+                    <Square aria-hidden="true" />
+                  </ToggleButton>
+                </IconTooltip>
               </ToggleButtonGroup>
             ) : null}
 
@@ -289,22 +292,24 @@ export function TrackerBar() {
               className="shrink-0 gap-0.5"
               selectionMode="multiple"
             >
-              <ToggleButton
-                aria-label={t("Billable")}
-                className="size-9 min-h-9 min-w-9"
-                isIconOnly
-                isSelected={active ? timer.billable : billable}
-                onChange={(selected: boolean) => {
-                  if (active) updateActiveTimer({ billable: selected });
-                  else setBillable(selected);
-                }}
-              >
-                <BillableIndicator
-                  billable={active ? timer.billable : billable}
-                  mode="icon"
-                  size="md"
-                />
-              </ToggleButton>
+              <IconTooltip>
+                <ToggleButton
+                  aria-label={t("Billable")}
+                  className="size-9 min-h-9 min-w-9"
+                  isIconOnly
+                  isSelected={active ? timer.billable : billable}
+                  onChange={(selected: boolean) => {
+                    if (active) updateActiveTimer({ billable: selected });
+                    else setBillable(selected);
+                  }}
+                >
+                  <BillableIndicator
+                    billable={active ? timer.billable : billable}
+                    mode="icon"
+                    size="md"
+                  />
+                </ToggleButton>
+              </IconTooltip>
             </ToggleButtonGroup>
           </Toolbar>
         </Toolbar>

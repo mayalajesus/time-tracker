@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Button } from "@heroui/react/button";
 import { Pause, Play } from "@gravity-ui/icons";
 import type { TimerStatus } from "@/lib/store";
@@ -14,15 +15,17 @@ export function TimerActionButton({ status, onPress }: TimerActionButtonProps) {
   const actionLabel = isRunning ? t("Pause") : status === "paused" ? t("Resume") : t("Start");
 
   return (
-    <Button
-      aria-label={actionLabel}
-      isIconOnly
-      size="sm"
-      variant={isRunning ? "secondary" : "primary"}
-      className="size-9 min-h-9 min-w-9 shrink-0"
-      onPress={onPress}
-    >
-      {isRunning ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-    </Button>
+    <IconTooltip>
+      <Button
+        aria-label={actionLabel}
+        isIconOnly
+        size="sm"
+        variant={isRunning ? "secondary" : "primary"}
+        className="size-9 min-h-9 min-w-9 shrink-0"
+        onPress={onPress}
+      >
+        {isRunning ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+      </Button>
+    </IconTooltip>
   );
 }

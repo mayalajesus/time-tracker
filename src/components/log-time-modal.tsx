@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Button } from "@heroui/react/button";
 import { Description } from "@heroui/react/description";
 import { FieldError } from "@heroui/react/field-error";
@@ -246,15 +247,17 @@ export function LogTimeModal({
                     className="shrink-0 gap-0.5"
                     selectionMode="multiple"
                   >
-                    <ToggleButton
-                      aria-label={t("Billable")}
-                      className="size-9 min-h-9 min-w-9"
-                      isIconOnly
-                      isSelected={billable}
-                      onChange={(selected: boolean) => setBillable(selected)}
-                    >
-                      <BillableIndicator billable={billable} mode="icon" size="md" />
-                    </ToggleButton>
+                    <IconTooltip>
+                      <ToggleButton
+                        aria-label={t("Billable")}
+                        className="size-9 min-h-9 min-w-9"
+                        isIconOnly
+                        isSelected={billable}
+                        onChange={(selected: boolean) => setBillable(selected)}
+                      >
+                        <BillableIndicator billable={billable} mode="icon" size="md" />
+                      </ToggleButton>
+                    </IconTooltip>
                   </ToggleButtonGroup>
                 </div>
 

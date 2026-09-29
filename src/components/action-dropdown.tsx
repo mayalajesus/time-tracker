@@ -1,3 +1,4 @@
+import { IconTooltip } from "@/components/icon-tooltip";
 import { Chip } from "@heroui/react/chip";
 import { Dropdown } from "@heroui/react/dropdown";
 import { Label } from "@heroui/react/label";
@@ -24,9 +25,11 @@ export function ActionDropdown({
 }) {
   return (
     <Dropdown>
-      <Dropdown.Trigger aria-label={ariaLabel} className="h-8 w-8 min-w-8 shrink-0 p-0">
-        <Ellipsis className="size-4" />
-      </Dropdown.Trigger>
+      <IconTooltip>
+        <Dropdown.Trigger aria-label={ariaLabel} className="h-8 w-8 min-w-8 shrink-0 p-0">
+          <Ellipsis className="size-4" />
+        </Dropdown.Trigger>
+      </IconTooltip>
       <Dropdown.Popover placement="bottom end" className="max-w-[calc(100vw-1.5rem)] min-w-48">
         <Dropdown.Menu onAction={(key) => onAction(String(key))}>
           {items.map((item) => (
