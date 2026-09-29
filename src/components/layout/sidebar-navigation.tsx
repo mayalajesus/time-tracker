@@ -3,6 +3,7 @@ import { Popover } from "@heroui/react/popover";
 import { ScrollShadow } from "@heroui/react/scroll-shadow";
 import { Separator } from "@heroui/react/separator";
 import { Typography } from "@heroui/react/typography";
+import { Tooltip } from "@heroui/react/tooltip";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ChartColumn,
@@ -25,14 +26,15 @@ type NavigationItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-const workspaceNavigation: NavigationItem[] = [
-  { to: "/tracker", label: "Tracker", icon: Clock },
+const trackerNavigation: NavigationItem = { to: "/tracker", label: "Tracker", icon: Clock };
+
+const managementNavigation: NavigationItem[] = [
   { to: "/projects", label: "Projects", icon: Folder },
   { to: "/clients", label: "Clients", icon: Person },
   { to: "/team", label: "Team", icon: Persons },
 ];
 
-const managementNavigation: NavigationItem[] = [
+const moreNavigation: NavigationItem[] = [
   { to: "/integrations", label: "Integrations", icon: Puzzle },
   { to: "/workspaces", label: "Workspaces", icon: Layers },
 ];
@@ -70,7 +72,7 @@ function NavigationLink({
   const navigate = useNavigate();
   const active = isNavigationItemActive(location.pathname, item);
 
-  return (
+  const button = (
     <Button
       {...(active ? { "aria-current": "page" as const } : {})}
       {...(collapsed ? { "aria-label": t(item.label) } : {})}
@@ -100,6 +102,17 @@ function NavigationLink({
         </Typography>
       ) : null}
     </Button>
+  );
+
+  return collapsed ? (
+    <Tooltip delay={300} closeDelay={0}>
+      {button}
+      <Tooltip.Content placement="right" showArrow>
+        {t(item.label)}
+      </Tooltip.Content>
+    </Tooltip>
+  ) : (
+    button
   );
 }
 
@@ -158,7 +171,7 @@ function ReportsNavigation({
   if (collapsed) {
     return (
       <Popover isOpen={reportsOpen} onOpenChange={onReportsOpenChange}>
-        <Popover.Trigger>
+        <Tooltip delay={300} closeDelay={0} isDisabled={reportsOpen}>
           <Button
             aria-controls="reports-submenu-collapsed"
             aria-expanded={reportsOpen}
@@ -171,7 +184,10 @@ function ReportsNavigation({
               <ChartColumn aria-hidden="true" className="size-4" />
             </span>
           </Button>
-        </Popover.Trigger>
+          <Tooltip.Content placement="right" showArrow>
+            {t("Reports")}
+          </Tooltip.Content>
+        </Tooltip>
         <Popover.Content
           placement="right top"
           className="w-44 max-w-[calc(100vw-1rem)] overflow-hidden p-1"
@@ -235,16 +251,8 @@ export function SidebarNavigation({
   return (
     <ScrollShadow orientation="vertical" hideScrollBar className="min-h-0 flex-1">
       <nav aria-label={t("Main navigation")} className="py-3">
-        {!collapsed ? <SectionLabel>{t("Workspace")}</SectionLabel> : null}
         <div className={collapsed ? "flex flex-col items-center gap-0.5" : "space-y-0.5"}>
-          {workspaceNavigation.map((item) => (
-            <NavigationLink
-              key={item.to}
-              item={item}
-              collapsed={collapsed}
-              onNavigate={onNavigate}
-            />
-          ))}
+          <NavigationLink item={trackerNavigation} collapsed={collapsed} onNavigate={onNavigate} />
           <ReportsNavigation
             collapsed={collapsed}
             reportsOpen={reportsOpen}
@@ -260,6 +268,22 @@ export function SidebarNavigation({
         )}
         <div className={`${collapsed ? "flex flex-col items-center gap-0.5" : "space-y-0.5"}`}>
           {managementNavigation.map((item) => (
+            <NavigationLink
+              key={item.to}
+              item={item}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+
+        {!collapsed ? (
+          <SectionLabel>{t("More")}</SectionLabel>
+        ) : (
+          <Separator className="mx-auto my-2 w-10" />
+        )}
+        <div className={collapsed ? "flex flex-col items-center gap-0.5" : "space-y-0.5"}>
+          {moreNavigation.map((item) => (
             <NavigationLink
               key={item.to}
               item={item}
