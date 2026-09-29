@@ -246,7 +246,8 @@ function isValidClient(value: unknown): value is Client {
     typeof client.id === "string" &&
     typeof client.name === "string" &&
     Boolean(client.name.trim()) &&
-    typeof client.contact === "string"
+    typeof client.contact === "string" &&
+    (client.billable === undefined || typeof client.billable === "boolean")
   );
 }
 
@@ -1908,6 +1909,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ),
           name: client.name.trim(),
           contact: client.contact.trim(),
+          billable: client.billable ?? false,
         },
         ...list,
       ]);

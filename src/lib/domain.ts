@@ -7,6 +7,8 @@ export interface Client {
   id: string;
   name: string;
   contact: string;
+  /** Missing in older account snapshots; defaults to false. */
+  billable?: boolean;
 }
 
 export interface Project {

@@ -6,6 +6,7 @@ import { Input } from "@heroui/react/input";
 import { Label } from "@heroui/react/label";
 import { Modal } from "@heroui/react/modal";
 import { Table } from "@heroui/react/table";
+import { Switch } from "@heroui/react/switch";
 import { TextField } from "@heroui/react/textfield";
 import { Typography } from "@heroui/react/typography";
 import { toast } from "@heroui/react/toast";
@@ -13,6 +14,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Pencil, Person, Plus, TrashBin } from "@gravity-ui/icons";
 import { useState } from "react";
 import { ActionDropdown } from "@/components/action-dropdown";
+import { BillableIndicator } from "@/components/billable-indicator";
 import { DataTable } from "@/components/data-table";
 import { FormAlert } from "@/components/form-feedback";
 import { ModalLayout } from "@/components/modal-layout";
@@ -54,6 +56,7 @@ function ClientsPage() {
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
+  const [billable, setBillable] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -74,12 +77,13 @@ function ClientsPage() {
     setEditingClientId(null);
     setName("");
     setContact("");
+    setBillable(false);
     setFormError(null);
   };
 
   const save = () => {
     if (!name.trim()) return;
-    const values = { name: name.trim(), contact: contact.trim() };
+    const values = { name: name.trim(), contact: contact.trim(), billable };
     const result = editingClientId ? updateClient(editingClientId, values) : addClient(values);
     if (!result.success) {
       setFormError(error(result.error));
@@ -151,6 +155,7 @@ function ClientsPage() {
           <Table.Header>
             <Table.Column isRowHeader>{t("Client")}</Table.Column>
             <Table.Column>{t("Contact")}</Table.Column>
+            <Table.Column>{t("Billable")}</Table.Column>
             <Table.Column>{t("Projects")}</Table.Column>
             <Table.Column>{t("Tracked")}</Table.Column>
             <Table.Column aria-label={t("Actions")}>{""}</Table.Column>
@@ -160,6 +165,9 @@ function ClientsPage() {
               <Table.Row key={client.id}>
                 <Table.Cell>{client.name}</Table.Cell>
                 <Table.Cell>{client.contact || "—"}</Table.Cell>
+                <Table.Cell>
+                  <BillableIndicator billable={client.billable ?? false} />
+                </Table.Cell>
                 <Table.Cell>{projectCountFor(client.id)}</Table.Cell>
                 <Table.Cell>{formatDuration(secondsFor(client.id), locale)}</Table.Cell>
                 <Table.Cell>
@@ -185,6 +193,7 @@ function ClientsPage() {
                             setEditingClientId(client.id);
                             setName(client.name);
                             setContact(client.contact);
+                            setBillable(client.billable ?? false);
                             setFormError(null);
                             setFormOpen(true);
                           }
@@ -272,6 +281,14 @@ function ClientsPage() {
                     <Description className="text-xs">{t("Optional")}</Description>
                     <FieldError />
                   </TextField>
+                  <Switch name="client-billable" isSelected={billable} onChange={setBillable}>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <Label>{t("Billable")}</Label>
+                    </Switch.Content>
+                  </Switch>
                 </ModalLayout.Body>
                 <ModalLayout.Footer>
                   <Button slot="close" type="button" variant="secondary">

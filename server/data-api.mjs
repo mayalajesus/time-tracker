@@ -511,7 +511,7 @@ export async function loadAccount(client, user, config) {
     [workspaceIds],
   );
   const clients = await client.query(
-    `select id::text, workspace_id::text, name, contact from public.clients where workspace_id = any($1::uuid[])`,
+    `select id::text, workspace_id::text, name, contact, billable from public.clients where workspace_id = any($1::uuid[])`,
     [workspaceIds],
   );
   const projects = await client.query(
@@ -593,7 +593,12 @@ export async function loadAccount(client, user, config) {
   const clientsByWorkspace = new Map();
   for (const row of clients.rows) {
     const list = clientsByWorkspace.get(row.workspace_id) ?? [];
-    list.push({ id: row.id, name: row.name, contact: row.contact });
+    list.push({
+      id: row.id,
+      name: row.name,
+      contact: row.contact,
+      billable: row.billable ?? false,
+    });
     clientsByWorkspace.set(row.workspace_id, list);
   }
   const memberIdsByProject = new Map();
@@ -1195,10 +1200,14 @@ async function syncAccount(client, user, config, account) {
       if (!item || typeof item !== "object") {
         throw new DataApiError(400, "Invalid client payload.");
       }
+      if (item.billable !== undefined && typeof item.billable !== "boolean") {
+        throw new DataApiError(400, "Invalid client billable value.");
+      }
       const result = await client.query(
-        `insert into public.clients (id, workspace_id, name, contact)
-         values ($1, $2, $3, $4)
-         on conflict (id) do update set name = excluded.name, contact = excluded.contact
+        `insert into public.clients (id, workspace_id, name, contact, billable)
+         values ($1, $2, $3, $4, coalesce($5::boolean, false))
+         on conflict (id) do update set name = excluded.name, contact = excluded.contact,
+           billable = coalesce($5::boolean, clients.billable)
          where clients.workspace_id = excluded.workspace_id
          returning id::text`,
         [
@@ -1206,6 +1215,7 @@ async function syncAccount(client, user, config, account) {
           workspaceId,
           requiredText(item.name, "Client name", 160),
           optionalText(item.contact, "Client contact", 2_000) ?? "",
+          item.billable ?? null,
         ],
       );
       if (!result.rowCount) {

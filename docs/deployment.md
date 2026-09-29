@@ -26,6 +26,10 @@ database URL, service-role key or access token with `VITE_`.
 
 ## Production release
 
+Client billing flags require `20260929130000_client_billable.sql` before deploying
+the API. Existing clients default to non-billable; older snapshots without the
+field preserve the stored value when synchronized.
+
 The explicit workspace creation release includes
 `20260918120000_remove_personal_workspace_bootstrap.sql` and
 `20260929120000_workspace_logo_data.sql`. The latter stores validated workspace
