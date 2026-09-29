@@ -107,7 +107,7 @@ function TeamPage() {
     const normalizedEmail = email.trim().toLowerCase();
     setCreatedLink(result.invitationUrl ?? "");
     toast.success(t("Invitation link created"), {
-      description: `${normalizedEmail} · ${role}`,
+      description: `${normalizedEmail} · ${t(role)}`,
     });
   };
 
@@ -365,7 +365,7 @@ function TeamPage() {
         <Modal.Backdrop>
           <Modal.Container size="sm">
             <Modal.Dialog>
-              <Modal.CloseTrigger />
+              <Modal.CloseTrigger aria-label={t("Close")} />
               <ModalLayout.Header>{t("Invite member")}</ModalLayout.Header>
               <Form
                 onSubmit={(event) => {

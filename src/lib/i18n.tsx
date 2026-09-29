@@ -246,6 +246,9 @@ const ptBR: Record<string, string> = {
   "Invitation link copied": "Link de convite copiado",
   "Invitation link": "Link do convite",
   "Copy link": "Copiar link",
+  Done: "Concluir",
+  "Choose invitation role": "Escolher função da pessoa convidada",
+  "name@company.com": "nome@empresa.com",
   "Copy the invitation link manually.": "Copie o link de convite manualmente.",
   "Create invitation link": "Criar link de convite",
   "A private invitation link will be created for you to share.":
