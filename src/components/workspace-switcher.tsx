@@ -1,4 +1,5 @@
 import { Button } from "@heroui/react/button";
+import { Avatar } from "@heroui/react/avatar";
 import { Card } from "@heroui/react/card";
 import { Description } from "@heroui/react/description";
 import { Dropdown } from "@heroui/react/dropdown";
@@ -12,6 +13,29 @@ import { useI18n } from "@/lib/i18n";
 import { useStore, type WorkspaceSummary } from "@/lib/store";
 import { ModalTriggerRegistration } from "@/components/overlay-trigger-registration";
 
+function WorkspaceLogo({
+  workspace,
+  enlarged = false,
+}: {
+  workspace: WorkspaceSummary;
+  enlarged?: boolean;
+}) {
+  return (
+    <Avatar
+      aria-hidden="true"
+      className={`${enlarged ? "size-7" : "size-6"} shrink-0 overflow-hidden rounded-full`}
+      size="sm"
+    >
+      {workspace.logoDataUrl ? (
+        <Avatar.Image alt="" src={workspace.logoDataUrl} className="object-contain" />
+      ) : null}
+      <Avatar.Fallback>
+        <Layers className="size-4" />
+      </Avatar.Fallback>
+    </Avatar>
+  );
+}
+
 function WorkspaceItem({ workspace, active }: { workspace: WorkspaceSummary; active: boolean }) {
   const { t } = useI18n();
   return (
@@ -21,9 +45,7 @@ function WorkspaceItem({ workspace, active }: { workspace: WorkspaceSummary; act
       aria-current={active ? "true" : undefined}
       className="min-h-10 px-2.5 py-1"
     >
-      <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-        <Layers className="size-3.5" />
-      </span>
+      <WorkspaceLogo workspace={workspace} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
           <Typography
@@ -102,9 +124,7 @@ export function WorkspaceSwitcher({
   );
   const triggerContent = (
     <>
-      <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center">
-        <Layers className="size-4" />
-      </span>
+      <WorkspaceLogo workspace={currentSummary} enlarged={collapsed} />
       {!collapsed ? (
         <span className="flex min-w-0 flex-1 items-center">
           <Typography type="body-sm" weight="semibold" truncate className="min-w-0 flex-1">
@@ -165,13 +185,16 @@ export function WorkspaceSwitcher({
 
   return (
     <>
-      <Card variant="secondary" className={collapsed ? "w-10 p-0" : "w-full p-0.5"}>
+      <Card
+        variant="secondary"
+        className={collapsed ? "size-10 shrink-0 gap-0 p-0 shadow-none" : "w-full p-0.5"}
+      >
         <Dropdown>
           <Dropdown.Trigger
             aria-label={t("Switch workspace")}
             className={
               collapsed
-                ? "flex h-10 w-10 items-center justify-center p-0"
+                ? "flex size-10 min-h-10 min-w-10 items-center justify-center p-0"
                 : "flex min-w-0 w-full items-center gap-2 px-2 py-1"
             }
           >
@@ -208,7 +231,7 @@ export function WorkspaceSwitcher({
                   )}
                 </Typography>
                 <div className="flex items-center gap-2 p-3">
-                  <Layers aria-hidden="true" className="size-4" />
+                  <WorkspaceLogo workspace={currentSummary} />
                   <div className="min-w-0">
                     <Typography type="body-sm" weight="semibold" truncate>
                       {currentSummary.name}
