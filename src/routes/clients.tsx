@@ -10,7 +10,7 @@ import { TextField } from "@heroui/react/textfield";
 import { Typography } from "@heroui/react/typography";
 import { toast } from "@heroui/react/toast";
 import { createFileRoute } from "@tanstack/react-router";
-import { Person, Plus, TrashBin } from "@gravity-ui/icons";
+import { Pencil, Person, Plus, TrashBin } from "@gravity-ui/icons";
 import { useState } from "react";
 import { ActionDropdown } from "@/components/action-dropdown";
 import { DataTable } from "@/components/data-table";
@@ -40,12 +40,21 @@ export const Route = createFileRoute("/clients")({
 });
 
 function ClientsPage() {
-  const { clients, projects, entries, can, addClient, deleteClient } = useStore();
+  const {
+    clients,
+    projects,
+    entries,
+    can,
+    addClient,
+    updateClient,
+    deleteClient,
+  } = useStore();
   const { locale, t, error } = useI18n();
-  const [newOpen, setNewOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -61,22 +70,26 @@ function ClientsPage() {
       .reduce((sum, entry) => sum + entry.seconds, 0);
   };
 
-  const resetCreateForm = () => {
+  const resetForm = () => {
+    setEditingClientId(null);
     setName("");
     setContact("");
-    setCreateError(null);
+    setFormError(null);
   };
 
-  const create = () => {
+  const save = () => {
     if (!name.trim()) return;
-    const result = addClient({ name: name.trim(), contact: contact.trim() });
+    const values = { name: name.trim(), contact: contact.trim() };
+    const result = editingClientId ? updateClient(editingClientId, values) : addClient(values);
     if (!result.success) {
-      setCreateError(error(result.error));
+      setFormError(error(result.error));
       return;
     }
-    toast.success(t("Client added"), { description: name.trim() });
-    resetCreateForm();
-    setNewOpen(false);
+    toast.success(t(editingClientId ? "Client updated" : "Client added"), {
+      description: name.trim(),
+    });
+    resetForm();
+    setFormOpen(false);
   };
 
   const confirmDelete = () => {
@@ -102,8 +115,8 @@ function ClientsPage() {
           can("manage-clients") ? (
             <Button
               onPress={() => {
-                resetCreateForm();
-                setNewOpen(true);
+                resetForm();
+                setFormOpen(true);
               }}
             >
               <Plus className="size-4" />
@@ -120,7 +133,14 @@ function ClientsPage() {
           description={t("Add a client to connect projects and organize tracked time.")}
           action={
             can("manage-clients") ? (
-              <Button size="sm" variant="secondary" onPress={() => setNewOpen(true)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={() => {
+                  resetForm();
+                  setFormOpen(true);
+                }}
+              >
                 {t("New client")}
               </Button>
             ) : null
@@ -149,6 +169,11 @@ function ClientsPage() {
                         ariaLabel={t("Actions for {name}", { name: client.name })}
                         items={[
                           {
+                            id: "edit",
+                            label: t("Edit client"),
+                            icon: <Pencil className="size-4" />,
+                          },
+                          {
                             id: "delete",
                             label: t("Delete client"),
                             icon: <TrashBin className="size-4" />,
@@ -156,6 +181,13 @@ function ClientsPage() {
                           },
                         ]}
                         onAction={(key) => {
+                          if (key === "edit") {
+                            setEditingClientId(client.id);
+                            setName(client.name);
+                            setContact(client.contact);
+                            setFormError(null);
+                            setFormOpen(true);
+                          }
                           if (key === "delete") {
                             setDeleteError(null);
                             setPendingDelete(client);
@@ -172,10 +204,10 @@ function ClientsPage() {
       )}
 
       <Modal
-        isOpen={newOpen}
+        isOpen={formOpen}
         onOpenChange={(open) => {
-          setNewOpen(open);
-          if (!open) resetCreateForm();
+          setFormOpen(open);
+          if (!open) resetForm();
         }}
       >
         <ModalTriggerRegistration />
@@ -183,16 +215,25 @@ function ClientsPage() {
           <Modal.Container size="sm">
             <Modal.Dialog>
               <Modal.CloseTrigger />
-              <ModalLayout.Header>{t("New client")}</ModalLayout.Header>
+              <ModalLayout.Header>
+                {t(editingClientId ? "Edit client" : "New client")}
+              </ModalLayout.Header>
               <Form
                 onSubmit={(event) => {
                   event.preventDefault();
-                  create();
+                  save();
                 }}
               >
                 <ModalLayout.Body>
-                  {createError ? (
-                    <FormAlert title={t("We couldn't add this client")} description={createError} />
+                  {formError ? (
+                    <FormAlert
+                      title={t(
+                        editingClientId
+                          ? "We couldn't update this client"
+                          : "We couldn't add this client",
+                      )}
+                      description={formError}
+                    />
                   ) : null}
 
                   <TextField
@@ -203,7 +244,7 @@ function ClientsPage() {
                     validate={(value) => (value.trim() ? null : t("Client name is required"))}
                     onChange={(value) => {
                       setName(value);
-                      setCreateError(null);
+                      setFormError(null);
                     }}
                   >
                     <Label>{t("Name")}</Label>
@@ -223,7 +264,7 @@ function ClientsPage() {
                     }
                     onChange={(value) => {
                       setContact(value);
-                      setCreateError(null);
+                      setFormError(null);
                     }}
                   >
                     <Label>{t("Contact")}</Label>
@@ -237,7 +278,7 @@ function ClientsPage() {
                     {t("Cancel")}
                   </Button>
                   <Button type="submit" isDisabled={!name.trim()}>
-                    {t("Create client")}
+                    {t(editingClientId ? "Save changes" : "Create client")}
                   </Button>
                 </ModalLayout.Footer>
               </Form>

@@ -177,6 +177,9 @@ const ptBR: Record<string, string> = {
   "Manage the people and companies connected to your projects.":
     "Gerencie as pessoas e empresas ligadas aos seus projetos.",
   "New client": "Novo cliente",
+  "Edit client": "Editar cliente",
+  "Client updated": "Cliente atualizado",
+  "We couldn't update this client": "Não conseguimos atualizar este cliente.",
   "No clients yet": "Ainda não há clientes",
   "Add a client to connect projects and organize tracked time.":
     "Adicione um cliente para vincular projetos e organizar as horas registradas.",
