@@ -43,10 +43,10 @@ function LegalConsentPage() {
           <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-surface text-accent shadow-sm">
             <ShieldCheck aria-hidden="true" className="size-6" />
           </div>
-          <Typography id="legal-consent-title" type="h1" weight="semibold">
+          <Typography id="legal-consent-title" type="h1" weight="semibold" align="center">
             Revise os termos para continuar
           </Typography>
-          <Typography type="body-sm" color="muted" className="mx-auto mt-2 max-w-sm">
+          <Typography type="body-sm" color="muted" align="center" className="mx-auto mt-2 max-w-sm">
             Confirme que você leu os documentos vigentes para continuar no Time Tracker.
           </Typography>
         </div>
