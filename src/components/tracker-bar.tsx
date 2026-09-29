@@ -10,7 +10,10 @@ import { ToggleButton } from "@heroui/react/toggle-button";
 import { ToggleButtonGroup } from "@heroui/react/toggle-button-group";
 import { Toolbar } from "@heroui/react/toolbar";
 import { toast } from "@heroui/react/toast";
-import { Square } from "@gravity-ui/icons";
+import { Button } from "@heroui/react/button";
+import { useFavoriteTasks } from "@/lib/use-favorite-tasks";
+import { favoriteTaskKey, type FavoriteTask } from "@/lib/favorite-tasks";
+import { Star, StarFill, Xmark, Square } from "@gravity-ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BillableIndicator } from "@/components/billable-indicator";
 import { FormAlert } from "@/components/form-feedback";
@@ -36,6 +39,7 @@ export function TrackerBar() {
     resumeTimer,
     stopTimer,
   } = useStore();
+  const { favorites, isFavorite, toggleFavorite } = useFavoriteTasks();
   const { elapsed } = useTimerTicker();
   const { locale, t, error } = useI18n();
   const [task, setTask] = useState("");
@@ -101,8 +105,76 @@ export function TrackerBar() {
     if (value.trim()) updateActiveTimer({ task: value });
   };
 
+  const currentTask = {
+    task: active ? activeTask : task,
+    projectId: active ? timer.projectId : projectId,
+    billable: active ? timer.billable : billable,
+  };
+  const selectFavorite = (favorite: FavoriteTask) => {
+    if (active) return;
+    if (
+      !projects.some((project) => project.id === favorite.projectId && project.status === "active")
+    )
+      return;
+    setTask(favorite.task);
+    setProjectId(favorite.projectId);
+    setBillable(favorite.billable);
+    setTimerError(null);
+    setProjectValidationVisible(false);
+    taskInputRef.current?.setCustomValidity("");
+    taskInputRef.current?.focus();
+  };
+
   return (
     <div className="space-y-3" data-tracker-bar>
+      {favorites.length > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label={t("Favorite tasks")}
+        >
+          {favorites.map((favorite) => {
+            const project = projects.find((item) => item.id === favorite.projectId);
+            const unavailable = !project || project.status !== "active";
+            return (
+              <div
+                key={favoriteTaskKey(favorite)}
+                className="inline-flex max-w-full items-center rounded-full bg-default"
+              >
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-w-0 rounded-full px-3"
+                  isDisabled={active || unavailable}
+                  aria-label={t("Use favorite {task}, {project}", {
+                    task: favorite.task,
+                    project: project?.name ?? t("Project unavailable"),
+                  })}
+                  onPress={() => selectFavorite(favorite)}
+                >
+                  <StarFill className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+                  <span className="max-w-48 truncate">{favorite.task}</span>
+                  <span className="max-w-32 truncate text-xs text-muted">
+                    {unavailable ? t("Project unavailable") : project?.name}
+                  </span>
+                </Button>
+                <IconTooltip>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    className="size-7 min-w-7 rounded-full"
+                    aria-label={t("Remove {task} from favorites", { task: favorite.task })}
+                    onPress={() => toggleFavorite(favorite)}
+                  >
+                    <Xmark className="size-3" />
+                  </Button>
+                </IconTooltip>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <Card className="w-full gap-0 p-1.5" variant="default">
         <Toolbar
           aria-label={t("Timer")}
@@ -217,6 +289,25 @@ export function TrackerBar() {
           />
 
           <Toolbar aria-label={t("Timer")} className="shrink-0 gap-1">
+            <IconTooltip>
+              <Button
+                isIconOnly
+                size="sm"
+                variant="ghost"
+                className="size-9 min-w-9"
+                aria-label={t(
+                  isFavorite(currentTask) ? "Remove from favorites" : "Add to favorites",
+                )}
+                aria-pressed={isFavorite(currentTask)}
+                onPress={() => toggleFavorite(currentTask)}
+              >
+                {isFavorite(currentTask) ? (
+                  <StarFill className="size-4 text-warning" />
+                ) : (
+                  <Star className="size-4" />
+                )}
+              </Button>
+            </IconTooltip>
             <TimerActionButton
               status={timer.status}
               onPress={() => {

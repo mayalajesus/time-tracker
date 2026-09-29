@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { isFavoriteTasks } from "./favorite-tasks";
 import { useAuth } from "./auth-context";
 import { createApiDataSource } from "./api-data-source";
 import type {
@@ -221,6 +222,7 @@ function isValidPreferences(value: unknown): value is UserPreferences {
   if (!value || typeof value !== "object") return false;
   const prefs = value as Partial<UserPreferences>;
   return (
+    (prefs.favoriteTasks === undefined || isFavoriteTasks(prefs.favoriteTasks)) &&
     typeof prefs.idleDetection === "boolean" &&
     isLocale(prefs.language) &&
     isThemeMode(prefs.theme) &&
@@ -412,6 +414,7 @@ export function migrateAccountSnapshot(value: unknown): PersistedAccount | null 
           ? preferences.activeWorkspaceId
           : null,
       reportFilters,
+      favoriteTasks: isFavoriteTasks(preferences.favoriteTasks) ? preferences.favoriteTasks : {},
     };
   }
 
@@ -2144,7 +2147,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Choose valid personal preferences." };
       setAccount((current) => ({
         ...current,
-        preferencesByUserId: { ...current.preferencesByUserId, [activeMemberId]: next },
+        preferencesByUserId: {
+          ...current.preferencesByUserId,
+          [activeMemberId]: {
+            ...(current.preferencesByUserId[activeMemberId] ?? initialPreferences),
+            ...patch,
+          },
+        },
       }));
       return { success: true };
     };

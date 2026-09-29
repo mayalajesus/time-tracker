@@ -22,6 +22,17 @@ export const localeOptions: Array<{ id: Locale; label: string }> = [
 ];
 
 const ptBR: Record<string, string> = {
+  "Favorite tasks": "Tarefas favoritas",
+  "Add to favorites": "Adicionar aos favoritos",
+  "Remove from favorites": "Remover dos favoritos",
+  "Remove {task} from favorites": "Remover {task} dos favoritos",
+  "Use favorite {task}, {project}": "Usar favorita {task}, {project}",
+  "Project unavailable": "Projeto indisponível",
+  "Choose a task and an active project to favorite":
+    "Informe uma tarefa e selecione um projeto ativo para favoritar",
+  "You can save up to 100 favorite tasks per workspace":
+    "Você pode salvar até 100 tarefas favoritas por workspace",
+  "Could not update favorites": "Não foi possível atualizar os favoritos",
   Tracker: "Rastreador de tempo",
   Projects: "Projetos",
   Clients: "Clientes",

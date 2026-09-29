@@ -291,6 +291,34 @@ function parseImageDataUrl(value) {
   return { bytes, contentType: match[1] };
 }
 
+function favoriteTasksValue(value) {
+  const favorites = value ?? {};
+  if (
+    !favorites ||
+    typeof favorites !== "object" ||
+    Array.isArray(favorites) ||
+    JSON.stringify(favorites).length > 100000 ||
+    !Object.values(favorites).every(
+      (items) =>
+        Array.isArray(items) &&
+        items.length <= 100 &&
+        items.every(
+          (item) =>
+            item &&
+            typeof item.task === "string" &&
+            item.task.trim().length > 0 &&
+            item.task.length <= 500 &&
+            typeof item.projectId === "string" &&
+            item.projectId.length > 0 &&
+            typeof item.billable === "boolean",
+        ),
+    )
+  ) {
+    throw new DataApiError(400, "Invalid favorite tasks.");
+  }
+  return favorites;
+}
+
 function reportFiltersValue(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value;
@@ -558,7 +586,8 @@ export async function loadAccount(client, user, config) {
     `select user_id, language, theme, timezone, idle_detection, ${
       hasAvatarData ? "avatar_data_url" : "null::text as avatar_data_url"
     }, ${hasActiveWorkspace ? "active_workspace_id::text" : "null::text as active_workspace_id"},
-       ${hasReportFilters ? "report_filters" : "'{}'::jsonb as report_filters"}
+       ${hasReportFilters ? "report_filters" : "'{}'::jsonb as report_filters"},
+       ${(await hasColumn(client, "user_preferences", "favorite_tasks")) ? "favorite_tasks" : "'{}'::jsonb as favorite_tasks"}
        from public.user_preferences where user_id = any($1::text[])`,
     [profileIds],
   );
@@ -665,6 +694,7 @@ export async function loadAccount(client, user, config) {
           timezone: isOwnPreferences ? (row?.timezone ?? "UTC") : "UTC",
           activeWorkspaceId: isOwnPreferences ? (row?.active_workspace_id ?? null) : null,
           reportFilters: isOwnPreferences ? reportFiltersValue(row?.report_filters) : {},
+          favoriteTasks: isOwnPreferences ? favoriteTasksValue(row?.favorite_tasks) : {},
         },
       ];
     }),
@@ -921,6 +951,12 @@ async function syncAccount(client, user, config, account) {
        on conflict (user_id) do update set language = excluded.language, theme = excluded.theme, timezone = excluded.timezone, idle_detection = excluded.idle_detection, updated_at = now()`,
       preferenceValues,
     );
+    if (ownPreferences.favoriteTasks !== undefined) {
+      await client.query(
+        `update public.user_preferences set favorite_tasks = $2::jsonb, updated_at = now() where user_id = $1`,
+        [user.id, JSON.stringify(favoriteTasksValue(ownPreferences.favoriteTasks))],
+      );
+    }
     if (hasReportFilters) {
       await client.query(
         `update public.user_preferences set report_filters = $2::jsonb, updated_at = now() where user_id = $1`,
@@ -1627,6 +1663,7 @@ async function updatePreferences(client, user, config, body) {
     "timezone",
     "activeWorkspaceId",
     "reportFilters",
+    "favoriteTasks",
   ]);
   if (Object.keys(patch).some((key) => !allowedKeys.has(key))) {
     throw new DataApiError(400, "Invalid preferences payload.");
@@ -1638,6 +1675,9 @@ async function updatePreferences(client, user, config, body) {
     values.push(value);
     updates.push(`${column} = $${values.length}${cast}`);
   };
+  if (patch.favoriteTasks !== undefined) {
+    addValue("favorite_tasks", JSON.stringify(favoriteTasksValue(patch.favoriteTasks)), "::jsonb");
+  }
   if (patch.idleDetection !== undefined) {
     if (typeof patch.idleDetection !== "boolean")
       throw new DataApiError(400, "Choose a valid idle detection preference.");

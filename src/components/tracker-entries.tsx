@@ -1,3 +1,5 @@
+import { Star } from "@gravity-ui/icons";
+import { useFavoriteTasks } from "@/lib/use-favorite-tasks";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { Button } from "@heroui/react/button";
 import { FieldError } from "@heroui/react/field-error";
@@ -502,6 +504,7 @@ function TrackerGroupSummaryRow({
   onToggle: () => void;
 }) {
   const { projects, clients, timer, startTimerFromTask, addEntry } = useStore();
+  const { isFavorite, toggleFavorite } = useFavoriteTasks();
   const { locale, t, error } = useI18n();
   const [isHovered, setIsHovered] = useState(false);
   const project = projects.find((item) => item.id === group.projectId);
@@ -657,6 +660,11 @@ function TrackerGroupSummaryRow({
               ariaLabel={t("Actions for {task} group", { task: group.task })}
               items={[
                 {
+                  id: "favorite",
+                  label: t(isFavorite(group) ? "Remove from favorites" : "Add to favorites"),
+                  icon: <Star className="size-4" />,
+                },
+                {
                   id: "duplicate",
                   label: t("Duplicate entry"),
                   icon: <Copy className="size-4" />,
@@ -668,6 +676,7 @@ function TrackerGroupSummaryRow({
                 },
               ]}
               onAction={(key) => {
+                if (key === "favorite") toggleFavorite(group);
                 if (key === "duplicate") duplicateLatestEntry();
                 if (key === "toggle") onToggle();
               }}
@@ -1093,6 +1102,8 @@ function TrackerEntryRow({
     onDeactivate();
   };
 
+  const { isFavorite, toggleFavorite } = useFavoriteTasks();
+
   const actionCell = (
     <Table.Cell className={trackerActionCellClass}>
       <div className={trackerActionLayoutClass} data-tracker-action>
@@ -1112,6 +1123,11 @@ function TrackerEntryRow({
           ariaLabel={t("Actions for {task}", { task: entry.task })}
           items={[
             {
+              id: "favorite",
+              label: t(isFavorite(entry) ? "Remove from favorites" : "Add to favorites"),
+              icon: <Star className="size-4" />,
+            },
+            {
               id: "duplicate",
               label: t("Duplicate entry"),
               icon: <Copy className="size-4" />,
@@ -1124,6 +1140,7 @@ function TrackerEntryRow({
             },
           ]}
           onAction={(key) => {
+            if (key === "favorite") toggleFavorite(entry);
             if (key === "duplicate") duplicateEntry();
             if (key === "delete") onRequestDelete(entry);
           }}
