@@ -511,7 +511,7 @@ export async function loadAccount(client, user, config) {
     [workspaceIds],
   );
   const clients = await client.query(
-    `select id::text, workspace_id::text, name, contact, billable from public.clients where workspace_id = any($1::uuid[])`,
+    `select id::text, workspace_id::text, name, contact, billable, currency from public.clients where workspace_id = any($1::uuid[])`,
     [workspaceIds],
   );
   const projects = await client.query(
@@ -598,6 +598,7 @@ export async function loadAccount(client, user, config) {
       name: row.name,
       contact: row.contact,
       billable: row.billable ?? false,
+      ...(row.currency ? { currency: row.currency } : {}),
     });
     clientsByWorkspace.set(row.workspace_id, list);
   }
@@ -1203,11 +1204,15 @@ async function syncAccount(client, user, config, account) {
       if (item.billable !== undefined && typeof item.billable !== "boolean") {
         throw new DataApiError(400, "Invalid client billable value.");
       }
+      if (item.currency !== undefined && !["BRL", "USD", "EUR"].includes(item.currency)) {
+        throw new DataApiError(400, "Choose a valid currency.");
+      }
       const result = await client.query(
-        `insert into public.clients (id, workspace_id, name, contact, billable)
-         values ($1, $2, $3, $4, coalesce($5::boolean, false))
+        `insert into public.clients (id, workspace_id, name, contact, billable, currency)
+         values ($1, $2, $3, $4, coalesce($5::boolean, false), $6)
          on conflict (id) do update set name = excluded.name, contact = excluded.contact,
-           billable = coalesce($5::boolean, clients.billable)
+           billable = coalesce($5::boolean, clients.billable),
+           currency = coalesce(excluded.currency, clients.currency)
          where clients.workspace_id = excluded.workspace_id
          returning id::text`,
         [
@@ -1216,6 +1221,7 @@ async function syncAccount(client, user, config, account) {
           requiredText(item.name, "Client name", 160),
           optionalText(item.contact, "Client contact", 2_000) ?? "",
           item.billable ?? null,
+          optionalCurrency(item.currency),
         ],
       );
       if (!result.rowCount) {

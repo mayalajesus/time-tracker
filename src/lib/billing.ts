@@ -2,6 +2,7 @@ import type { Locale } from "./i18n";
 
 export const currencyOptions = ["BRL", "USD", "EUR", "GBP"] as const;
 export type CurrencyCode = (typeof currencyOptions)[number];
+export const clientCurrencyOptions: readonly CurrencyCode[] = ["BRL", "USD", "EUR"];
 
 export type BillingPreference = {
   hourlyRate: number;

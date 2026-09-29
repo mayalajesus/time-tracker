@@ -18,6 +18,7 @@ import { BillableIndicator } from "@/components/billable-indicator";
 import { DataTable } from "@/components/data-table";
 import { FormAlert } from "@/components/form-feedback";
 import { ModalLayout } from "@/components/modal-layout";
+import { ModalSelect } from "@/components/modal-select";
 import { ModalTriggerRegistration } from "@/components/overlay-trigger-registration";
 import { PageHeader } from "@/components/page-header";
 import { EmptyBlock } from "@/components/states";
@@ -25,6 +26,7 @@ import { formatDuration } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { Client } from "@/lib/domain";
 import { useStore } from "@/lib/store";
+import { clientCurrencyOptions, defaultCurrencyForLocale, type CurrencyCode } from "@/lib/billing";
 
 export const Route = createFileRoute("/clients")({
   head: () => ({
@@ -50,6 +52,7 @@ function ClientsPage() {
     addClient,
     updateClient,
     deleteClient,
+    workspaceBilling,
   } = useStore();
   const { locale, t, error } = useI18n();
   const [formOpen, setFormOpen] = useState(false);
@@ -57,6 +60,10 @@ function ClientsPage() {
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [billable, setBillable] = useState(false);
+  const defaultCurrency = clientCurrencyOptions.includes(workspaceBilling.currency)
+    ? workspaceBilling.currency
+    : defaultCurrencyForLocale(locale);
+  const [currency, setCurrency] = useState<CurrencyCode>(defaultCurrency);
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -78,12 +85,13 @@ function ClientsPage() {
     setName("");
     setContact("");
     setBillable(false);
+    setCurrency(defaultCurrency);
     setFormError(null);
   };
 
   const save = () => {
     if (!name.trim()) return;
-    const values = { name: name.trim(), contact: contact.trim(), billable };
+    const values = { name: name.trim(), contact: contact.trim(), billable, currency };
     const result = editingClientId ? updateClient(editingClientId, values) : addClient(values);
     if (!result.success) {
       setFormError(error(result.error));
@@ -156,6 +164,7 @@ function ClientsPage() {
             <Table.Column isRowHeader>{t("Client")}</Table.Column>
             <Table.Column>{t("Contact")}</Table.Column>
             <Table.Column>{t("Billable")}</Table.Column>
+            <Table.Column>{t("Currency")}</Table.Column>
             <Table.Column>{t("Projects")}</Table.Column>
             <Table.Column>{t("Tracked")}</Table.Column>
             <Table.Column aria-label={t("Actions")}>{""}</Table.Column>
@@ -168,6 +177,7 @@ function ClientsPage() {
                 <Table.Cell>
                   <BillableIndicator billable={client.billable ?? false} />
                 </Table.Cell>
+                <Table.Cell>{client.currency ?? workspaceBilling.currency}</Table.Cell>
                 <Table.Cell>{projectCountFor(client.id)}</Table.Cell>
                 <Table.Cell>{formatDuration(secondsFor(client.id), locale)}</Table.Cell>
                 <Table.Cell>
@@ -194,6 +204,7 @@ function ClientsPage() {
                             setName(client.name);
                             setContact(client.contact);
                             setBillable(client.billable ?? false);
+                            setCurrency(client.currency ?? defaultCurrency);
                             setFormError(null);
                             setFormOpen(true);
                           }
@@ -289,6 +300,13 @@ function ClientsPage() {
                       <Label>{t("Billable")}</Label>
                     </Switch.Content>
                   </Switch>
+                  <ModalSelect
+                    label={t("Currency")}
+                    buttonAriaLabel={t("Choose currency")}
+                    value={currency}
+                    options={clientCurrencyOptions.map((option) => ({ id: option, label: option }))}
+                    onChange={(value) => setCurrency(value as CurrencyCode)}
+                  />
                 </ModalLayout.Body>
                 <ModalLayout.Footer>
                   <Button slot="close" type="button" variant="secondary">

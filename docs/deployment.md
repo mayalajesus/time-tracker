@@ -26,6 +26,11 @@ database URL, service-role key or access token with `VITE_`.
 
 ## Production release
 
+Client currency selection requires `20260929140000_client_currency.sql` before
+deploying the API. Legacy clients retain member currency defaults until a currency
+is selected. New time entries snapshot the selected client currency; existing
+entries retain their stored currency unless reassigned to a different project.
+
 Client billing flags require `20260929130000_client_billable.sql` before deploying
 the API. Existing clients default to non-billable; older snapshots without the
 field preserve the stored value when synchronized.

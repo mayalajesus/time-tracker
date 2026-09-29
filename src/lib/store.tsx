@@ -48,6 +48,7 @@ import {
 import { isDefaultAvatarUrl, resetSessionDefaultAvatar } from "./default-avatar";
 import {
   defaultCurrencyForLocale,
+  clientCurrencyOptions,
   isCurrencyCode,
   type BillingPreference,
   type CurrencyCode,
@@ -247,7 +248,8 @@ function isValidClient(value: unknown): value is Client {
     typeof client.name === "string" &&
     Boolean(client.name.trim()) &&
     typeof client.contact === "string" &&
-    (client.billable === undefined || typeof client.billable === "boolean")
+    (client.billable === undefined || typeof client.billable === "boolean") &&
+    (client.currency === undefined || clientCurrencyOptions.includes(client.currency))
   );
 }
 
@@ -1487,6 +1489,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         },
       );
 
+    const currencyForProject = (projectId: string | null): CurrencyCode => {
+      const project = projects.find((item) => item.id === projectId);
+      return (
+        clients.find((client) => client.id === project?.clientId)?.currency ??
+        workspaceBilling.currency
+      );
+    };
+
     const startTimer = (
       task: string,
       projectId: string | null,
@@ -1515,7 +1525,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           startedDate: getLocalToday(new Date(now), preferences.timezone),
           startClock: nowTime(preferences.timezone, new Date(now)),
           hourlyRate: workspaceBilling.hourlyRate,
-          currency: workspaceBilling.currency,
+          currency: currencyForProject(projectId),
         },
       );
       timerRevisionRef.current += 1;
@@ -1562,6 +1572,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...current,
         ...patch,
         ...(patch.task !== undefined ? { task: patch.task.trim() } : {}),
+        ...(patch.projectId !== undefined && patch.projectId !== current.projectId
+          ? { currency: currencyForProject(patch.projectId) }
+          : {}),
       };
       if (
         next.task === current.task &&
@@ -1697,7 +1710,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : entry.hourlyRate,
         currency:
           options.refreshBilling || entry.currency === undefined
-            ? workspaceBilling.currency
+            ? currencyForProject(entry.projectId)
             : entry.currency,
       } satisfies Omit<TimeEntry, "id">;
       const validation = validateEntry(billedEntry);
@@ -1729,7 +1742,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "You can only edit your own time entries." };
       if (patch.userId !== undefined && patch.userId !== current.userId)
         return { success: false, error: "A time entry owner cannot be changed." };
-      const next = { ...current, ...patch };
+      const next = {
+        ...current,
+        ...patch,
+        ...(patch.projectId !== undefined && patch.projectId !== current.projectId
+          ? { currency: currencyForProject(patch.projectId) }
+          : {}),
+      };
       const timeChanged = ["date", "start", "end", "endDate", "seconds"].some(
         (field) => field in patch,
       );
@@ -1901,6 +1920,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!can("manage-clients"))
         return { success: false, error: "Only Admins and the Owner can manage clients." };
       if (!client.name.trim()) return { success: false, error: "A client name is required." };
+      if (client.currency !== undefined && !clientCurrencyOptions.includes(client.currency))
+        return { success: false, error: "Choose a valid currency." };
       setClients((list) => [
         {
           id: nextId(
@@ -1910,6 +1931,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           name: client.name.trim(),
           contact: client.contact.trim(),
           billable: client.billable ?? false,
+          currency:
+            client.currency ??
+            (clientCurrencyOptions.includes(workspaceBilling.currency)
+              ? workspaceBilling.currency
+              : defaultCurrencyForLocale(preferences.language)),
         },
         ...list,
       ]);
@@ -1919,6 +1945,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const updateClient = (id: string, patch: Partial<Client>): StoreResult => {
       if (!can("manage-clients"))
         return { success: false, error: "Only Admins and the Owner can manage clients." };
+      if (patch.currency !== undefined && !clientCurrencyOptions.includes(patch.currency))
+        return { success: false, error: "Choose a valid currency." };
       const current = clients.find((client) => client.id === id);
       if (!current) return { success: false, error: "This client no longer exists." };
       const next = {

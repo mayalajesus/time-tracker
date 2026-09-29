@@ -9,6 +9,7 @@ export interface Client {
   contact: string;
   /** Missing in older account snapshots; defaults to false. */
   billable?: boolean;
+  currency?: CurrencyCode;
 }
 
 export interface Project {
