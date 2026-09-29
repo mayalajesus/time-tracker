@@ -461,7 +461,7 @@ function WorkspacesPage() {
 
       <WorkspaceFormModal
         isOpen={createOpen}
-        title={t("New company workspace")}
+        title={t("New workspace")}
         name={name}
         logoDataUrl={logoDataUrl}
         hourlyRate={hourlyRate}
