@@ -1181,6 +1181,9 @@ function TrackerEntryRow({
     event: KeyboardEvent<HTMLInputElement>,
     field: "task" | "description",
   ) => {
+    // Keep typing out of the table's type-ahead search, which captures spaces.
+    event.stopPropagation();
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       restoreField();
@@ -1203,6 +1206,8 @@ function TrackerEntryRow({
   };
 
   const handleDurationKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       restoreField();
