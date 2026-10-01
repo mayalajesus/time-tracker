@@ -312,7 +312,7 @@ function AppShellContent({ children }: { children: ReactNode }) {
           <main
             id="main-content"
             tabIndex={-1}
-            className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-8"
+            className="min-w-0 w-full flex-1 px-4 py-6 md:px-8"
           >
             {children}
           </main>
