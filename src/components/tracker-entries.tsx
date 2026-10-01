@@ -565,25 +565,33 @@ function TrackerGroupSummaryRow({
       <Table.Cell className={`${summaryCellClass} min-w-0 p-0`}>
         <Surface variant={summarySurfaceVariant} className="min-h-20 px-4 py-3">
           <div className="flex min-h-[3.5rem] min-w-0 flex-col justify-center">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={toggleLabel}
-              aria-expanded={isExpanded}
-              data-tracker-group-toggle
-              className="inline-flex h-8 min-h-8 min-w-0 max-w-full justify-start px-1 py-1 text-left font-semibold"
-              {...(group.entries[0]
-                ? { "aria-controls": trackerEntryRowKey(group, group.entries[0], 0) }
-                : {})}
-              onPress={onToggle}
-            >
-              <span className="min-w-0 truncate">{group.task}</span>
-              {isExpanded ? (
-                <ChevronUp className="ml-1 size-4 shrink-0" aria-hidden="true" />
-              ) : (
-                <ChevronDown className="ml-1 size-4 shrink-0" aria-hidden="true" />
-              )}
-            </Button>
+            <Tooltip delay={350}>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={toggleLabel}
+                aria-expanded={isExpanded}
+                data-tracker-group-toggle
+                className="inline-flex h-8 min-h-8 min-w-0 max-w-full justify-start px-1 py-1 text-left font-semibold"
+                {...(group.entries[0]
+                  ? { "aria-controls": trackerEntryRowKey(group, group.entries[0], 0) }
+                  : {})}
+                onPress={onToggle}
+              >
+                <span className="min-w-0 truncate">{group.task}</span>
+                {isExpanded ? (
+                  <ChevronUp className="ml-1 size-4 shrink-0" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="ml-1 size-4 shrink-0" aria-hidden="true" />
+                )}
+              </Button>
+              <Tooltip.Content
+                showArrow
+                className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+              >
+                {group.task}
+              </Tooltip.Content>
+            </Tooltip>
             <span className="truncate pl-1 font-normal">
               {t(group.entries.length === 1 ? "{count} entry" : "{count} entries", {
                 count: group.entries.length,
@@ -594,12 +602,21 @@ function TrackerGroupSummaryRow({
       </Table.Cell>
       <Table.Cell className={`${summaryCellClass} p-0`}>
         <Surface variant={summarySurfaceVariant} className="flex min-h-20 items-center px-4 py-3">
-          <span className="flex min-w-0 flex-col">
-            <span className={`${summaryTextClass} flex items-center gap-2 font-medium`}>
-              <ProjectLabel project={project ?? null} label={projectName} />
-            </span>
-            <span className={`${summaryTextClass} text-xs font-light`}>{clientName}</span>
-          </span>
+          <Tooltip delay={350}>
+            <Tooltip.Trigger
+              className="flex min-w-0 flex-col"
+              aria-label={`${projectName}, ${clientName}`}
+            >
+              <span className={`${summaryTextClass} flex items-center gap-2 font-medium`}>
+                <ProjectLabel project={project ?? null} label={projectName} />
+              </span>
+              <span className={`${summaryTextClass} text-xs font-light`}>{clientName}</span>
+            </Tooltip.Trigger>
+            <Tooltip.Content
+              showArrow
+              className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+            >{`${projectName}\n${clientName}`}</Tooltip.Content>
+          </Tooltip>
         </Surface>
       </Table.Cell>
       <Table.Cell className={`${summaryCellClass} p-0 text-center`}>
@@ -1271,16 +1288,24 @@ function TrackerEntryRow({
               </div>
             ) : (
               <div className="min-w-0 flex-[0_1_auto]">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  fullWidth
-                  className={taskButtonClass}
-                  data-tracker-field="task"
-                  onPress={() => onActivate("task")}
-                >
-                  <span className="truncate">{entry.task}</span>
-                </Button>
+                <Tooltip delay={350}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    fullWidth
+                    className={taskButtonClass}
+                    data-tracker-field="task"
+                    onPress={() => onActivate("task")}
+                  >
+                    <span className="truncate">{entry.task}</span>
+                  </Button>
+                  <Tooltip.Content
+                    showArrow
+                    className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+                  >
+                    {entry.task}
+                  </Tooltip.Content>
+                </Tooltip>
               </div>
             )}
             <IconTooltip>
@@ -1335,7 +1360,7 @@ function TrackerEntryRow({
               />
             </div>
           ) : (
-            <IconTooltip>
+            <Tooltip delay={350}>
               <Button
                 size="sm"
                 variant="ghost"
@@ -1347,7 +1372,13 @@ function TrackerEntryRow({
               >
                 {entry.description || "·"}
               </Button>
-            </IconTooltip>
+              <Tooltip.Content
+                showArrow
+                className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+              >
+                {entry.description || t("Add description")}
+              </Tooltip.Content>
+            </Tooltip>
           )}
         </div>
       </Table.Cell>
@@ -1365,25 +1396,43 @@ function TrackerEntryRow({
                 if (commitField("project", next)) onDeactivate();
               }}
             />
-            <span className="mt-1 block truncate">{selectedClientName}</span>
+            <Tooltip delay={350}>
+              <Tooltip.Trigger className="mt-1 block truncate">
+                {selectedClientName}
+              </Tooltip.Trigger>
+              <Tooltip.Content
+                showArrow
+                className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+              >
+                {selectedClientName}
+              </Tooltip.Content>
+            </Tooltip>
             {errorFor("project")}
           </div>
         ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            fullWidth
-            className={projectButtonClass}
-            data-tracker-field="project"
-            onPress={() => onActivate("project")}
-          >
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="flex w-full min-w-0 items-center gap-2 truncate font-medium">
-                <ProjectLabel project={project ?? null} label={projectName} />
+          <Tooltip delay={350}>
+            <Button
+              size="sm"
+              variant="ghost"
+              fullWidth
+              className={projectButtonClass}
+              data-tracker-field="project"
+              onPress={() => onActivate("project")}
+            >
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="flex w-full min-w-0 items-center gap-2 truncate font-medium">
+                  <ProjectLabel project={project ?? null} label={projectName} />
+                </span>
+                <span className="block w-full min-w-0 truncate text-xs font-light">
+                  {clientName}
+                </span>
               </span>
-              <span className="block w-full min-w-0 truncate text-xs font-light">{clientName}</span>
-            </span>
-          </Button>
+            </Button>
+            <Tooltip.Content
+              showArrow
+              className="max-w-[min(32rem,calc(100vw-2rem))] whitespace-pre-wrap break-words"
+            >{`${projectName}\n${clientName}`}</Tooltip.Content>
+          </Tooltip>
         )}
       </Table.Cell>
 
