@@ -31,6 +31,11 @@ export type AuthClient = {
     password: string;
     options?: { emailRedirectTo?: string; data?: Record<string, string>; captchaToken?: string };
   }) => Promise<AuthResponse>;
+  resend: (credentials: {
+    type: "signup";
+    email: string;
+    options?: { emailRedirectTo?: string; captchaToken?: string };
+  }) => Promise<{ error: ErrorLike }>;
   signInWithOAuth: (options: {
     provider: "google";
     options?: { redirectTo?: string };
@@ -41,6 +46,7 @@ export type AuthClient = {
     options: { redirectTo?: string; captchaToken?: string },
   ) => Promise<{ error: ErrorLike }>;
   updateUser: (attributes: { password?: string; email?: string }) => Promise<{ error: ErrorLike }>;
+  resetPasswordWithToken?: (password: string, token: string) => Promise<{ error: ErrorLike }>;
 };
 
 export const isAuthConfigured =
@@ -70,6 +76,7 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
         return supabase.auth.signInWithPassword(credentials);
       },
       signUp: (credentials) => supabase.auth.signUp(credentials),
+      resend: (credentials) => supabase.auth.resend(credentials),
       signInWithOAuth: (options) => supabase.auth.signInWithOAuth(options),
       signOut: () => supabase.auth.signOut(),
       resetPasswordForEmail: (email, options) =>
@@ -103,7 +110,26 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
         };
       return neonAuth.getSession() as unknown as Promise<AuthResponse>;
     },
-    signUp: (credentials) => neonAuth.signUp(credentials) as unknown as Promise<AuthResponse>,
+    signUp: async (credentials) => {
+      // The adapter treats a successful signup without a session as an error.
+      // An account awaiting email verification legitimately has no session yet.
+      const result = await neonAuth.getBetterAuthInstance().signUp.email({
+        email: credentials.email,
+        password: credentials.password,
+        name: credentials.options?.data?.displayName ?? "",
+        callbackURL: credentials.options?.emailRedirectTo,
+      });
+      if (result.error)
+        return {
+          data: { session: null },
+          error: {
+            message: result.error.message ?? "Unable to create your account. Please try again.",
+          },
+        };
+      return neonAuth.getSession() as unknown as Promise<AuthResponse>;
+    },
+    resend: (credentials) =>
+      neonAuth.resend(credentials) as unknown as Promise<{ error: ErrorLike }>,
     signInWithOAuth: (options) =>
       neonAuth.signInWithOAuth(options) as unknown as Promise<{ error: ErrorLike }>,
     signOut: () => neonAuth.signOut() as unknown as Promise<{ error: ErrorLike }>,
@@ -113,6 +139,14 @@ async function createConfiguredClient(): Promise<AuthClient | null> {
       }>,
     updateUser: (attributes) =>
       neonAuth.updateUser(attributes) as unknown as Promise<{ error: ErrorLike }>,
+    resetPasswordWithToken: async (newPassword, token) => {
+      const result = await neonAuth.getBetterAuthInstance().resetPassword({ newPassword, token });
+      return {
+        error: result.error
+          ? { message: result.error.message ?? "Unable to update your password. Please try again." }
+          : null,
+      };
+    },
   };
 }
 

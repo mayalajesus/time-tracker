@@ -27,6 +27,7 @@ import {
 } from "@/lib/profile-image";
 import { useStore, type ThemeMode } from "@/lib/store";
 import { updateEmail, updatePassword } from "@/lib/auth";
+import { passwordRequirements } from "@/lib/password-policy";
 import { useAuth } from "@/lib/auth-context";
 import { createApiDataSource } from "@/lib/api-data-source";
 import { useAccountLifecycle } from "@/lib/account-lifecycle-context";
@@ -251,8 +252,10 @@ function SettingsPage() {
       setAccountError("Name must be 120 characters or fewer.");
       return;
     }
-    if (password && password.length < 8) {
-      setAccountError("Password must be at least 8 characters.");
+    const unmetPasswordRequirement =
+      password && passwordRequirements.find((rule) => !rule.meets(password));
+    if (unmetPasswordRequirement) {
+      setAccountError(unmetPasswordRequirement.error);
       return;
     }
     if (password !== passwordConfirmation) {
@@ -501,9 +504,10 @@ function SettingsPage() {
             name="account-password"
             type="password"
             value={password}
-            validate={(value) =>
-              value && value.length < 8 ? t("Password must be at least 8 characters.") : null
-            }
+            validate={(value) => {
+              const unmet = value && passwordRequirements.find((rule) => !rule.meets(value));
+              return unmet ? t(unmet.error) : null;
+            }}
             onChange={(value) => {
               setPassword(value);
               setAccountError(null);

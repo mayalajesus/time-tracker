@@ -22,6 +22,33 @@ export const localeOptions: Array<{ id: Locale; label: string }> = [
 ];
 
 const ptBR: Record<string, string> = {
+  "Saving…": "Salvando…",
+  "The recovery link may have expired or already been used. Request a new password reset email.":
+    "O link de recuperação pode ter expirado ou já ter sido usado. Solicite um novo e-mail para redefinir sua senha.",
+  "Sign in to continue. If confirmation is still required, request another email.":
+    "Entre para continuar. Se ainda precisar confirmar seu e-mail, solicite outro envio.",
+  "Resend confirmation email": "Reenviar e-mail de confirmação",
+  "Didn't receive the confirmation email?": "Não recebeu o e-mail de confirmação?",
+  "If confirmation is still required, check the inbox and spam folder for":
+    "Se a confirmação ainda for necessária, confira a caixa de entrada e o spam de",
+  "Unable to request confirmation. Please try again later.":
+    "Não foi possível solicitar a confirmação. Tente novamente mais tarde.",
+  "Unable to create your account. Please try again.":
+    "Não foi possível criar sua conta. Tente novamente.",
+  "Unable to sign in.": "Não foi possível entrar. Confira seus dados e tente novamente.",
+  "Unable to update your password. Please try again.":
+    "Não foi possível atualizar sua senha. Tente novamente.",
+  "This link could not be used": "Não foi possível usar este link",
+  "The link may have expired or already been used. Sign in if you have already confirmed your email, or request another link.":
+    "O link pode ter expirado ou já ter sido usado. Entre se já confirmou seu e-mail ou solicite outro link.",
+  "Choose a new password to continue.": "Escolha uma nova senha para continuar.",
+  "Save new password": "Salvar nova senha",
+  "Confirm your email before accessing your account.":
+    "Confirme seu e-mail antes de acessar sua conta.",
+  "Email not confirmed":
+    "Confirme seu e-mail antes de entrar. Se necessário, solicite outro e-mail de confirmação.",
+  "Email is not verified":
+    "Confirme seu e-mail antes de entrar. Se necessário, solicite outro e-mail de confirmação.",
   "Send invitation": "Enviar convite",
   "An invitation email will be sent. You can also copy the private link.":
     "O convite será enviado por e-mail. Você também poderá copiar o link privado.",

@@ -3,7 +3,7 @@ import { Check } from "@gravity-ui/icons";
 import { Form } from "@heroui/react/form";
 import { Typography } from "@heroui/react/typography";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AuthDivider,
   AuthError,
@@ -12,6 +12,8 @@ import {
   AuthPage,
   GoogleAuthButton,
 } from "@/components/auth-page";
+import { passwordRequirements } from "@/lib/password-policy";
+import { ConfirmationEmail } from "@/components/confirmation-email";
 import { signInWithGoogle, signUpWithPassword } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
@@ -19,24 +21,6 @@ import { getAuthReturnPath } from "@/lib/auth-redirect";
 import { isTurnstileConfigured, TurnstileChallenge } from "@/components/turnstile";
 
 export const Route = createFileRoute("/signup")({ component: SignupPage });
-
-const passwordRequirements = [
-  {
-    label: "At least 8 characters",
-    error: "Password must be at least 8 characters.",
-    meets: (value: string) => value.length >= 8,
-  },
-  {
-    label: "At least one uppercase letter",
-    error: "Password must contain at least one uppercase letter.",
-    meets: (value: string) => /[A-Z]/.test(value),
-  },
-  {
-    label: "At least one number",
-    error: "Password must contain at least one number.",
-    meets: (value: string) => /[0-9]/.test(value),
-  },
-];
 
 function SignupPage() {
   const { session } = useAuth();
@@ -48,7 +32,9 @@ function SignupPage() {
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const requestInFlight = useRef(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
@@ -58,6 +44,7 @@ function SignupPage() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (requestInFlight.current || (isTurnstileConfigured && !captchaToken)) return;
     setError(null);
     const normalizedFirstName = firstName.trim().replace(/\s+/g, " ");
     const normalizedLastName = lastName.trim().replace(/\s+/g, " ");
@@ -89,31 +76,51 @@ function SignupPage() {
       setError("Passwords do not match.");
       return;
     }
+    requestInFlight.current = true;
     setBusy(true);
-    const result = await signUpWithPassword(
-      normalizedEmail,
-      password,
-      normalizedFirstName,
-      normalizedLastName,
-      captchaToken ?? undefined,
-    );
-    setBusy(false);
-    if (!result.success) {
-      setError(result.error);
+    try {
+      const result = await signUpWithPassword(
+        normalizedEmail,
+        password,
+        normalizedFirstName,
+        normalizedLastName,
+        captchaToken ?? undefined,
+      );
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setSubmittedEmail(normalizedEmail);
+      setPassword("");
+      setConfirmation("");
+      if (result.data) {
+        window.location.replace(getAuthReturnPath());
+        return;
+      }
+      setCreated(true);
+    } catch {
+      setError("Unable to create your account. Please try again.");
+    } finally {
+      requestInFlight.current = false;
+      setBusy(false);
       setCaptchaToken(null);
       setCaptchaResetKey((value) => value + 1);
-      return;
     }
-    setCreated(true);
   };
 
   const continueWithGoogle = async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setError(null);
     setBusy(true);
-    const result = await signInWithGoogle();
-    if (!result.success) {
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success) setError(result.error);
+    } catch {
+      setError("Unable to sign in.");
+    } finally {
+      requestInFlight.current = false;
       setBusy(false);
-      setError(result.error);
     }
   };
 
@@ -125,9 +132,7 @@ function SignupPage() {
       <AuthError message={error} />
       {created ? (
         <div className="space-y-4" role="status">
-          <Typography type="body-sm" color="muted">
-            {t("Check your email to confirm your account before signing in.")}
-          </Typography>
+          <ConfirmationEmail initialEmail={submittedEmail} justRequested />
           <Button
             className="w-full"
             onPress={() =>

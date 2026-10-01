@@ -2,6 +2,7 @@ import type { Session } from "@supabase/supabase-js";
 import { getAuthClient, type AuthClient } from "./auth-client";
 import { getAuthRedirect } from "./supabase";
 import { getAuthReturnPath } from "./auth-redirect";
+import { passwordRequirements } from "./password-policy";
 
 export type AuthResult<T = undefined> =
   { success: true; data?: T } | { success: false; error: string };
@@ -58,7 +59,9 @@ export async function signInWithPassword(
   const failure = emailOperationError(response.error);
   return (
     failure ??
-    (response.data.session ? { success: true, data: response.data.session } : { success: true })
+    (response.data.session
+      ? { success: true, data: response.data.session }
+      : { success: false, error: "Unable to sign in." })
   );
 }
 
@@ -115,18 +118,49 @@ export async function requestPasswordReset(
 ): Promise<AuthResult> {
   const authClient = await requireClient();
   if (!authClient) return unavailable();
+  const redirect = new URL(getAuthRedirect());
+  redirect.searchParams.set("mode", "recovery");
   const { error } = await authClient.resetPasswordForEmail(email, {
-    redirectTo: getAuthRedirect("/settings"),
+    redirectTo: redirect.toString(),
     ...(captchaToken ? { captchaToken } : {}),
   });
   return emailOperationError(error) ?? { success: true };
 }
 
-export async function updatePassword(password: string): Promise<AuthResult> {
+export async function resendConfirmation(
+  email: string,
+  captchaToken?: string,
+): Promise<AuthResult> {
   const authClient = await requireClient();
   if (!authClient) return unavailable();
-  const { error } = await authClient.updateUser({ password });
-  return getError(error) ?? { success: true };
+  const redirect = new URL(getAuthRedirect());
+  redirect.searchParams.set("redirect", getAuthReturnPath());
+  const { error } = await authClient.resend({
+    type: "signup",
+    email,
+    options: { emailRedirectTo: redirect.toString(), ...(captchaToken ? { captchaToken } : {}) },
+  });
+  return emailOperationError(error) ?? { success: true };
+}
+
+export async function updatePassword(
+  password: string,
+  recoveryToken?: string,
+): Promise<AuthResult> {
+  const unmet = passwordRequirements.find((rule) => !rule.meets(password));
+  if (unmet) return { success: false, error: unmet.error };
+  const authClient = await requireClient();
+  if (!authClient) return unavailable();
+  try {
+    if (recoveryToken && authClient.resetPasswordWithToken) {
+      const { error } = await authClient.resetPasswordWithToken(password, recoveryToken);
+      return getError(error) ?? { success: true };
+    }
+    const { error } = await authClient.updateUser({ password });
+    return getError(error) ?? { success: true };
+  } catch {
+    return { success: false, error: "Unable to update your password. Please try again." };
+  }
 }
 
 export async function updateEmail(email: string): Promise<AuthResult> {

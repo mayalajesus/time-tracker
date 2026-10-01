@@ -29,6 +29,9 @@ export async function authenticateDataRequest(request, config, getPool) {
       throw new DataApiError(401, "The authentication token is invalid or expired.");
     }
     const user = await response.json();
+    if (!user.email_confirmed_at) {
+      throw new DataApiError(403, "Confirm your email before accessing your account.");
+    }
     return {
       ...extractAuthIdentity({
         id: user.id,

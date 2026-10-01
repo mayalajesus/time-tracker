@@ -4,7 +4,7 @@ import { Label } from "@heroui/react/label";
 import { Form } from "@heroui/react/form";
 import { Link } from "@heroui/react/link";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AuthDivider,
   AuthError,
@@ -13,6 +13,7 @@ import {
   AuthPage,
   GoogleAuthButton,
 } from "@/components/auth-page";
+import { ConfirmationEmail } from "@/components/confirmation-email";
 import { signInWithGoogle, signInWithPassword } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
@@ -29,6 +30,8 @@ function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const requestInFlight = useRef(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
@@ -38,99 +41,135 @@ function LoginPage() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (requestInFlight.current || (isTurnstileConfigured && !captchaToken)) return;
+    requestInFlight.current = true;
     setError(null);
     setBusy(true);
-    const result = await signInWithPassword(
-      email.trim(),
-      password,
-      captchaToken ?? undefined,
-      rememberMe,
-    );
-    setBusy(false);
-    if (!result.success) {
-      setError(result.error);
+    try {
+      const result = await signInWithPassword(
+        email.trim().toLowerCase(),
+        password,
+        captchaToken ?? undefined,
+        rememberMe,
+      );
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      window.location.replace(getAuthReturnPath());
+    } catch {
+      setError("Unable to sign in.");
+    } finally {
+      requestInFlight.current = false;
+      setBusy(false);
       setCaptchaToken(null);
       setCaptchaResetKey((value) => value + 1);
-      return;
     }
-    window.location.replace(getAuthReturnPath());
   };
 
   const continueWithGoogle = async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setError(null);
     setBusy(true);
-    const result = await signInWithGoogle();
-    if (!result.success) {
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success) setError(result.error);
+    } catch {
+      setError("Unable to sign in.");
+    } finally {
+      requestInFlight.current = false;
       setBusy(false);
-      setError(result.error);
     }
   };
 
   return (
     <AuthPage title={t("Sign in")} description={t("Access your time tracking workspace.")}>
       <AuthError message={error} />
-      <GoogleAuthButton onPress={continueWithGoogle} isDisabled={busy} />
-      <AuthDivider />
-      <Form className="flex flex-col gap-5" onSubmit={submit}>
-        <AuthField
-          id="login-email"
-          label={t("Email")}
-          type="email"
-          value={email}
-          onChange={(value) => {
-            setEmail(value);
-            setError(null);
-          }}
-          autoComplete="email"
-          placeholder="john@example.com"
-          validate={(value) => {
-            if (!value.trim()) return t("Email is required");
-            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
-              ? null
-              : t("Enter a valid email address");
-          }}
-        />
-        <AuthField
-          id="login-password"
-          allowPasswordToggle
-          label={t("Password")}
-          type="password"
-          value={password}
-          onChange={(value) => {
-            setPassword(value);
-            setError(null);
-          }}
-          autoComplete="current-password"
-          placeholder={t("Enter your password")}
-          validate={(value) => (value ? null : t("Password is required"))}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Checkbox
-            name="remember-me"
-            isSelected={rememberMe}
-            onChange={setRememberMe}
+      {showConfirmation ? (
+        <>
+          <ConfirmationEmail initialEmail={email} />
+          <Button variant="ghost" className="w-full" onPress={() => setShowConfirmation(false)}>
+            {t("Back to sign in")}
+          </Button>
+        </>
+      ) : (
+        <>
+          <GoogleAuthButton onPress={continueWithGoogle} isDisabled={busy} />
+          <AuthDivider />
+          <Form className="flex flex-col gap-5" onSubmit={submit}>
+            <AuthField
+              id="login-email"
+              label={t("Email")}
+              type="email"
+              value={email}
+              onChange={(value) => {
+                setEmail(value);
+                setError(null);
+              }}
+              autoComplete="email"
+              placeholder="john@example.com"
+              validate={(value) => {
+                if (!value.trim()) return t("Email is required");
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+                  ? null
+                  : t("Enter a valid email address");
+              }}
+            />
+            <AuthField
+              id="login-password"
+              allowPasswordToggle
+              label={t("Password")}
+              type="password"
+              value={password}
+              onChange={(value) => {
+                setPassword(value);
+                setError(null);
+              }}
+              autoComplete="current-password"
+              placeholder={t("Enter your password")}
+              validate={(value) => (value ? null : t("Password is required"))}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Checkbox
+                name="remember-me"
+                isSelected={rememberMe}
+                onChange={setRememberMe}
+                isDisabled={busy}
+              >
+                <Checkbox.Content className="items-center gap-2">
+                  <Checkbox.Control>
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                  <Label>{t("Remember me")}</Label>
+                </Checkbox.Content>
+              </Checkbox>
+              <Link href="/forgot-password">{t("Forgot password?")}</Link>
+            </div>
+            {isTurnstileConfigured ? (
+              <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
+            ) : null}
+            <Button
+              className="w-full"
+              type="submit"
+              isDisabled={busy || (isTurnstileConfigured && !captchaToken)}
+            >
+              {busy ? t("Signing in…") : t("Sign in")}
+            </Button>
+          </Form>
+          <Button
+            variant="ghost"
+            className="w-full"
             isDisabled={busy}
+            onPress={() => {
+              setError(null);
+              setShowConfirmation(true);
+            }}
           >
-            <Checkbox.Content className="items-center gap-2">
-              <Checkbox.Control>
-                <Checkbox.Indicator />
-              </Checkbox.Control>
-              <Label>{t("Remember me")}</Label>
-            </Checkbox.Content>
-          </Checkbox>
-          <Link href="/forgot-password">{t("Forgot password?")}</Link>
-        </div>
-        {isTurnstileConfigured ? (
-          <TurnstileChallenge onToken={setCaptchaToken} resetKey={captchaResetKey} />
-        ) : null}
-        <Button
-          className="w-full"
-          type="submit"
-          isDisabled={busy || (isTurnstileConfigured && !captchaToken)}
-        >
-          {busy ? t("Signing in…") : t("Sign in")}
-        </Button>
-      </Form>
+            {t("Didn't receive the confirmation email?")}
+          </Button>
+        </>
+      )}
       <AuthFooter prompt={t("Don't have an account?")} to="/signup" action={t("Create account")} />
     </AuthPage>
   );

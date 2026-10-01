@@ -81,6 +81,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!configured || authLoading || !session || lifecycle.loading || !lifecycle.status) return;
+    // Let the callback finish authentication or password recovery before routing
+    // to consent. Otherwise competing redirects can interrupt those flows.
+    if (currentLocation.pathname === "/auth/callback") return;
     if (lifecycle.status.accountStatus === "deletion_pending") {
       if (currentLocation.pathname !== "/account-deletion") {
         void navigate({ to: "/account-deletion", replace: true });

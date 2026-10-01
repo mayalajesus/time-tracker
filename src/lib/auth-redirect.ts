@@ -3,7 +3,26 @@ const DEFAULT_AUTH_RETURN_PATH = "/tracker";
 export function getAuthReturnPath(fallback = DEFAULT_AUTH_RETURN_PATH): string {
   if (typeof window === "undefined") return fallback;
   const redirect = new URLSearchParams(window.location.search).get("redirect");
-  return redirect && redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : fallback;
+  if (!redirect || !redirect.startsWith("/") || /[\\\u0000-\u0020]/.test(redirect)) return fallback;
+  try {
+    const target = new URL(redirect, window.location.origin);
+    if (target.origin !== window.location.origin) return fallback;
+    // Auth and lifecycle destinations would redirect back to themselves.
+    if (
+      [
+        "/login",
+        "/signup",
+        "/auth/callback",
+        "/legal-consent",
+        "/account-deletion",
+        "/forgot-password",
+      ].includes(target.pathname.replace(/\/+$/, ""))
+    )
+      return fallback;
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return fallback;
+  }
 }
 
 export function getLoginPath(): string {
