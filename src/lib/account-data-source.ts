@@ -25,7 +25,13 @@ export type ReportEntriesQuery = {
   endDate: string;
 };
 
-export type InvitationLink = { member: Member; invitationUrl: string };
+export type InvitationEmailStatus =
+  "disabled" | "pending" | "sending" | "accepted" | "failed" | "unknown" | "skipped";
+export type InvitationLink = {
+  member: Member;
+  invitationUrl: string;
+  emailStatus: InvitationEmailStatus;
+};
 export type CreateWorkspaceInput = {
   name: string;
   logoDataUrl?: string | null;

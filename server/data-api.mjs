@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { queueEmail, deliverInvitation, welcomeOnAccess } from "./transactional-emails.mjs";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { avatarDataValue as profileAvatarDataValue } from "./auth-profile.mjs";
@@ -57,6 +58,16 @@ export function providerEnv(env) {
   const neonAuthUrl = envValue(env, "VITE_NEON_AUTH_URL").replace(/\/$/, "");
   return {
     databaseProvider,
+    mailjet: {
+      enabled:
+        envValue(env, "MAILJET_ENABLED") === "true" &&
+        envValue(env, "DATABASE_ENV") === "production" &&
+        (!envValue(env, "VERCEL_ENV") || envValue(env, "VERCEL_ENV") === "production"),
+      apiKey: envValue(env, "MAILJET_API_KEY"),
+      secretKey: envValue(env, "MAILJET_SECRET_KEY"),
+      fromEmail: envValue(env, "MAILJET_FROM_EMAIL"),
+      fromName: envValue(env, "MAILJET_FROM_NAME") || "Time Tracker",
+    },
     databaseUrl:
       envValue(env, "DATABASE_URL") ||
       (databaseProvider === "supabase" ? envValue(env, "SUPABASE_DATABASE_URL") : ""),
@@ -1371,6 +1382,65 @@ function invitationRedirect(config, invitationId) {
   return redirect.toString();
 }
 
+async function invitationEmail(client, user, config, body, invitation) {
+  const workspace = await client.query("select name from public.workspaces where id=$1", [
+    invitation.workspace_id,
+  ]);
+  return await queueEmail(client, {
+    key: body.emailOperationKey,
+    kind: "invitation",
+    userId: user.id,
+    invitationId: invitation.id,
+    recipient: invitation.email,
+    payload: {
+      workspace: workspace.rows[0].name,
+      inviter: user.name || user.email,
+      role: invitation.role,
+      expiresAt: invitation.expires_at,
+      url: invitationRedirect(config, invitation.id),
+    },
+  });
+}
+
+async function processInvitationEmail(client, user, config, body, resend) {
+  const workspaceId = uuid(body.workspaceId);
+  const requestId = body.emailRequestId ? uuid(body.emailRequestId) : randomUUID();
+  const emailOperationKey = `invitation:${user.id}:${workspaceId}:${resend ? "resend" : "create"}:${requestId}`;
+  let result;
+  await client.query("begin");
+  try {
+    await requireInvitationManager(client, user.id, workspaceId, "Member");
+    await client.query("select id from public.workspaces where id=$1 for update", [workspaceId]);
+    const previous = await client.query(
+      `select e.id as email_id, i.id::text, i.workspace_id::text, i.email, i.role, i.invited_at, i.expires_at, i.status
+      from public.transactional_emails e join public.workspace_invitations i on i.id=e.invitation_id where e.operation_key=$1`,
+      [emailOperationKey],
+    );
+    if (previous.rows[0]) {
+      const invitation = previous.rows[0];
+      await requireInvitationManager(client, user.id, workspaceId, invitation.role);
+      if (invitation.status !== "pending" || new Date(invitation.expires_at) <= new Date())
+        throw new DataApiError(409, "This invitation is no longer pending.");
+      result = {
+        member: invitationMember(invitation),
+        invitationUrl: invitationRedirect(config, invitation.id),
+        emailId: invitation.email_id,
+      };
+    } else {
+      result = await (resend ? resendInvitation : inviteMember)(client, user, config, {
+        ...body,
+        emailOperationKey,
+      });
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
+  const { emailId, ...invitation } = result;
+  return { ...invitation, emailStatus: await deliverInvitation(client, config, emailId) };
+}
+
 async function inviteMember(client, user, config, body) {
   await ensureProfile(client, user, config);
   const workspaceId = uuid(body.workspaceId);
@@ -1432,6 +1502,7 @@ async function inviteMember(client, user, config, body) {
   return {
     member: invitationMember(invitation),
     invitationUrl: invitationRedirect(config, invitation.id),
+    emailId: await invitationEmail(client, user, config, body, invitation),
   };
 }
 
@@ -1457,6 +1528,7 @@ async function resendInvitation(client, user, config, body) {
   return {
     member: invitationMember(updated.rows[0]),
     invitationUrl: invitationRedirect(config, invitationId),
+    emailId: await invitationEmail(client, user, config, body, updated.rows[0]),
   };
 }
 
@@ -1808,7 +1880,11 @@ async function operation(request, user, config, body) {
         throw error;
       }
     }
-    if (body.operation === "loadAccount") return await loadAccount(client, user, config);
+    if (body.operation === "loadAccount") {
+      const account = await loadAccount(client, user, config);
+      await welcomeOnAccess(client, user, config);
+      return account;
+    }
     if (body.operation === "loadReportEntries") return await loadReportEntries(client, user, body);
     if (body.operation === "updatePreferences")
       return await updatePreferences(client, user, config, body);
@@ -1824,9 +1900,9 @@ async function operation(request, user, config, body) {
       }
     }
     if (body.operation === "inviteMember" || body.operation === "createInvitationLink")
-      return await inviteMember(client, user, config, body);
+      return await processInvitationEmail(client, user, config, body, false);
     if (body.operation === "resendInvitation")
-      return await resendInvitation(client, user, config, body);
+      return await processInvitationEmail(client, user, config, body, true);
     if (body.operation === "cancelInvitation") return await cancelInvitation(client, user, body);
     if (body.operation === "updateProfileName")
       return await updateProfileName(client, user, config, body);

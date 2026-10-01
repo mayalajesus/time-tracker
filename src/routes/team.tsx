@@ -20,7 +20,8 @@ import {
   PersonPlus,
   TrashBin,
 } from "@gravity-ui/icons";
-import { useState } from "react";
+import type { InvitationEmailStatus } from "@/lib/account-data-source";
+import { useRef, useState } from "react";
 import { ActionDropdown } from "@/components/action-dropdown";
 import { DataTable } from "@/components/data-table";
 import { FormAlert } from "@/components/form-feedback";
@@ -32,6 +33,17 @@ import { formatDuration } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type { Member, Role } from "@/lib/domain";
 import { useStore } from "@/lib/store";
+
+function invitationEmailFeedback(status?: InvitationEmailStatus) {
+  if (status === "accepted") return "Invitation created. The email was accepted for sending.";
+  if (status === "failed")
+    return "Invitation created, but the email could not be sent. Copy the link or resend the invitation.";
+  if (status === "unknown" || status === "sending")
+    return "Invitation created. Email sending could not be confirmed. You can share the link below.";
+  if (status === "pending")
+    return "Invitation created. The email is pending. You can share the link below.";
+  return "Invitation created. Email sending is disabled in this environment. Share the link below.";
+}
 
 type InviteRole = Exclude<Role, "Owner">;
 
@@ -68,6 +80,8 @@ function TeamPage() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [createdLink, setCreatedLink] = useState("");
+  const [createdEmailStatus, setCreatedEmailStatus] = useState<InvitationEmailStatus | undefined>();
+  const inviteRequestRef = useRef(false);
   const [invitationActionId, setInvitationActionId] = useState<string | null>(null);
   const [pendingCancel, setPendingCancel] = useState<Member | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -89,6 +103,7 @@ function TeamPage() {
     setRole("Member");
     setInviteError(null);
     setCreatedLink("");
+    setCreatedEmailStatus(undefined);
   };
 
   const openInvite = () => {
@@ -97,18 +112,25 @@ function TeamPage() {
   };
 
   const submitInvite = async () => {
+    if (inviteRequestRef.current) return;
+    inviteRequestRef.current = true;
     setInviteBusy(true);
-    const result = await inviteMember(email, role);
-    setInviteBusy(false);
-    if (!result.success) {
-      setInviteError(error(result.error));
-      return;
+    try {
+      const result = await inviteMember(email, role);
+      if (!result.success) {
+        setInviteError(error(result.error));
+        return;
+      }
+      const normalizedEmail = email.trim().toLowerCase();
+      setCreatedLink(result.invitationUrl ?? "");
+      setCreatedEmailStatus(result.emailStatus);
+      toast.info(t(invitationEmailFeedback(result.emailStatus)), { description: normalizedEmail });
+    } catch {
+      setInviteError(t("We couldn't prepare this invitation"));
+    } finally {
+      inviteRequestRef.current = false;
+      setInviteBusy(false);
     }
-    const normalizedEmail = email.trim().toLowerCase();
-    setCreatedLink(result.invitationUrl ?? "");
-    toast.success(t("Invitation link created"), {
-      description: `${normalizedEmail} · ${t(role)}`,
-    });
   };
 
   const copyInvitationLink = async (invitationUrl: string) => {
@@ -121,18 +143,27 @@ function TeamPage() {
   };
 
   const handleResend = async (member: Member) => {
+    if (inviteRequestRef.current) return;
+    inviteRequestRef.current = true;
     setInvitationActionId(member.id);
-    const result = await resendInvite(member.id);
-    setInvitationActionId(null);
-    if (!result.success) {
-      toast.danger(t("We couldn't refresh this invitation"), { description: error(result.error) });
-      return;
-    }
     try {
-      await navigator.clipboard.writeText(result.invitationUrl ?? "");
-      toast.success(t("Invitation link copied"), { description: member.email });
+      const result = await resendInvite(member.id);
+      if (!result.success) {
+        toast.danger(t("We couldn't refresh this invitation"), {
+          description: error(result.error),
+        });
+        return;
+      }
+      setCreatedLink(result.invitationUrl ?? "");
+      setCreatedEmailStatus(result.emailStatus);
+      setInviteError(null);
+      setInviteOpen(true);
+      toast.info(t(invitationEmailFeedback(result.emailStatus)), { description: member.email });
     } catch {
-      toast.success(t("Invitation refreshed"), { description: member.email });
+      toast.danger(t("We couldn't refresh this invitation"));
+    } finally {
+      inviteRequestRef.current = false;
+      setInvitationActionId(null);
     }
   };
 
@@ -383,6 +414,9 @@ function TeamPage() {
 
                   {createdLink ? (
                     <div className="space-y-3">
+                      <Typography type="body-sm" role="status">
+                        {t(invitationEmailFeedback(createdEmailStatus))}
+                      </Typography>
                       <Typography type="body-sm" color="muted">
                         {t(
                           "Share this private link with the invited person. It expires in 7 days.",
@@ -420,7 +454,9 @@ function TeamPage() {
                         <Label>{t("Email")}</Label>
                         <Input variant="secondary" placeholder={t("name@company.com")} />
                         <Description className="text-xs">
-                          {t("A private invitation link will be created for you to share.")}
+                          {t(
+                            "An invitation email will be sent. You can also copy the private link.",
+                          )}
                         </Description>
                         <FieldError />
                       </TextField>
@@ -474,7 +510,7 @@ function TeamPage() {
                         {t("Cancel")}
                       </Button>
                       <Button type="submit" isDisabled={!email.trim()} isPending={inviteBusy}>
-                        {t("Create invitation link")}
+                        {t("Send invitation")}
                       </Button>
                     </>
                   )}

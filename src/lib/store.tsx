@@ -104,6 +104,7 @@ export type StoreResult =
       success: true;
       id?: string;
       invitationUrl?: string;
+      emailStatus?: import("./account-data-source").InvitationEmailStatus;
       warning?: string;
       conflict?: TimeEntry;
     }
@@ -2011,7 +2012,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ? current.identities
           : [...current.identities, createIdentity(invitation)],
       }));
-      return { success: true, id: invitation.id, invitationUrl };
+      return {
+        success: true,
+        id: invitation.id,
+        invitationUrl,
+        emailStatus: response.data.emailStatus,
+      };
     };
 
     const resendInvite = async (memberId: string): Promise<StoreResult> => {
@@ -2027,7 +2033,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setMembers((list) =>
         list.map((candidate) => (candidate.id === memberId ? response.data.member : candidate)),
       );
-      return { success: true, invitationUrl: response.data.invitationUrl };
+      return {
+        success: true,
+        invitationUrl: response.data.invitationUrl,
+        emailStatus: response.data.emailStatus,
+      };
     };
 
     const cancelInvite = async (memberId: string): Promise<StoreResult> => {

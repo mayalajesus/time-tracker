@@ -22,6 +22,19 @@ export const localeOptions: Array<{ id: Locale; label: string }> = [
 ];
 
 const ptBR: Record<string, string> = {
+  "Send invitation": "Enviar convite",
+  "An invitation email will be sent. You can also copy the private link.":
+    "O convite será enviado por e-mail. Você também poderá copiar o link privado.",
+  "Invitation created. The email was accepted for sending.":
+    "Convite criado. O e-mail foi aceito para envio.",
+  "Invitation created, but the email could not be sent. Copy the link or resend the invitation.":
+    "Convite criado, mas não foi possível enviar o e-mail. Copie o link ou reenvie o convite.",
+  "Invitation created. Email sending could not be confirmed. You can share the link below.":
+    "Convite criado. Não foi possível confirmar o envio do e-mail. Você pode compartilhar o link abaixo.",
+  "Invitation created. The email is pending. You can share the link below.":
+    "Convite criado. O e-mail está pendente. Você pode compartilhar o link abaixo.",
+  "Invitation created. Email sending is disabled in this environment. Share the link below.":
+    "Convite criado. O envio de e-mail está desativado neste ambiente. Compartilhe o link abaixo.",
   "Favorite tasks": "Tarefas favoritas",
   "Add to favorites": "Adicionar aos favoritos",
   "Remove from favorites": "Remover dos favoritos",

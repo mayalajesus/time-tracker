@@ -117,9 +117,18 @@ export function createApiDataSource(): AccountDataSource {
     saveActiveTimer: (_userId, timer) => request<TimerState>("saveActiveTimer", { timer }),
     clearActiveTimer: (_userId, workspaceId) => request<null>("clearActiveTimer", { workspaceId }),
     inviteMember: (workspaceId, email, role) =>
-      request<InvitationLink>("createInvitationLink", { workspaceId, email, role }),
+      request<InvitationLink>("createInvitationLink", {
+        workspaceId,
+        email,
+        role,
+        emailRequestId: crypto.randomUUID(),
+      }),
     resendInvitation: (workspaceId, invitationId) =>
-      request<InvitationLink>("resendInvitation", { workspaceId, invitationId }),
+      request<InvitationLink>("resendInvitation", {
+        workspaceId,
+        invitationId,
+        emailRequestId: crypto.randomUUID(),
+      }),
     cancelInvitation: (workspaceId, invitationId) =>
       request<null>("cancelInvitation", { workspaceId, invitationId }),
     updateProfileName: (name) => request<null>("updateProfileName", { name }),
