@@ -1,6 +1,7 @@
 import { Star } from "@gravity-ui/icons";
 import { useFavoriteTasks } from "@/lib/use-favorite-tasks";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableEditingMode } from "@/components/table-editing-mode";
 import { Button } from "@heroui/react/button";
 import { FieldError } from "@heroui/react/field-error";
 import { Input } from "@heroui/react/input";
@@ -1259,6 +1260,7 @@ function TrackerEntryRow({
       onHoverChange={setIsHovered}
     >
       <Table.Cell className={`${trackerCellClass} min-w-0 ${isGroupedChild ? "pl-8" : ""}`.trim()}>
+        {activeField ? <TableEditingMode /> : null}
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             {activeField === "task" ? (
